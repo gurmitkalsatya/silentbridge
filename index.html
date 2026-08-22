@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>SilentBridge — Acoustic P2P Mesh Emergency Communicator</title>
   <meta name="description" content="Zero-infrastructure, offline emergency peer-to-peer acoustic mesh communicator transmitting SOS telemetry, exact GPS, and voice memos via near-ultrasonic sound waves.">
   <link rel="manifest" href="manifest.json">
@@ -629,11 +632,11 @@
 
   </main>
 
-  <!-- Modular Scripts -->
-  <script src="crc16.js"></script>
-  <script src="packetEngine.js"></script>
-  <script src="audioModem.js"></script>
-  <script src="app.js"></script>
+  <!-- Modular Scripts (Cache-Busted for Immediate Updates) -->
+  <script src="crc16.js?v=3.1.0"></script>
+  <script src="packetEngine.js?v=3.1.0"></script>
+  <script src="audioModem.js?v=3.1.0"></script>
+  <script src="app.js?v=3.1.0"></script>
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {
