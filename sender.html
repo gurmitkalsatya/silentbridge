@@ -150,22 +150,6 @@
       </button>
     </div>
 
-    <!-- 60-SECOND ANTI-SPAM COOLDOWN BANNER (Active after dispatch) -->
-    <div id="senderCooldownBanner" class="hidden p-3.5 rounded-2xl bg-gradient-to-r from-amber-950/90 via-tactical-900 to-amber-950/90 border-2 border-amber-500/80 font-mono text-xs text-amber-200 flex flex-wrap items-center justify-between gap-3 shadow-xl">
-      <div class="flex items-center gap-2.5">
-        <span class="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40">
-          <i data-lucide="shield-alert" class="w-4 h-4 animate-pulse"></i>
-        </span>
-        <div>
-          <div class="font-extrabold text-white text-xs tracking-wider">⏳ ANTI-SPAM COOLDOWN ACTIVE</div>
-          <div class="text-[11px] text-amber-300/90">Triggers locked: <strong id="cooldownSecondsRemaining" class="text-white font-extrabold text-sm">60s</strong> remaining</div>
-        </div>
-      </div>
-      <span class="text-[10px] px-2.5 py-1 rounded bg-amber-950 text-amber-300 border border-amber-500/40 font-bold">
-        PROTECTING AIRWAVES
-      </span>
-    </div>
-
     <!-- ⚡ HIGH-PRIORITY 1-TAP INSTANT PANIC SOS BUTTON -->
     <div class="p-1">
       <button type="button" id="btnOneTapPanicSos" class="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-500 hover:to-rose-500 active:scale-[0.98] transition-all shadow-2xl shadow-red-900/80 border-2 border-red-400 text-white font-mono font-extrabold text-base sm:text-lg tracking-wider uppercase flex items-center justify-center gap-3 group">
@@ -174,7 +158,7 @@
         </div>
         <div class="text-left">
           <span class="block leading-none">⚡ 1-TAP INSTANT PANIC SOS</span>
-          <span class="text-[11px] font-normal text-red-100 normal-case block mt-0.5">Safety pipeline: 5s Cancel Window + 60s Anti-Spam protection</span>
+          <span class="text-[11px] font-normal text-red-100 normal-case block mt-0.5">Instant transmission: Broadcasts GPS location & critical alert to rescue teams in 1 tap</span>
         </div>
       </button>
     </div>
@@ -460,42 +444,6 @@
         <span id="senderBroadcastBtnText">BROADCAST ACOUSTIC SOS & VOICE</span>
         <div id="senderTxProgressOverlay" class="absolute inset-0 bg-slate-400/30 w-0 transition-all duration-75 pointer-events-none"></div>
       </button>
-    </div>
-
-    <!-- 🚨 5-SECOND CANCEL / UNDO SAFETY OVERLAY -->
-    <div id="dispatchCancelOverlay" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-      <div class="bg-tactical-900 border-2 border-red-500 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl font-mono text-center flex flex-col items-center gap-5 relative overflow-hidden animate-pulse">
-        
-        <!-- Top Indicator -->
-        <div class="w-16 h-16 rounded-2xl bg-red-600/20 text-red-400 border border-red-500/40 flex items-center justify-center shadow-lg shadow-red-950/60">
-          <i data-lucide="radio" class="w-8 h-8 animate-ping"></i>
-        </div>
-
-        <div>
-          <span class="text-xs px-3 py-1 rounded-full bg-red-600 text-white font-extrabold tracking-wider uppercase inline-block mb-2 shadow-md">
-            SAFETY DISPATCH PIPELINE
-          </span>
-          <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-wide uppercase">
-            DISPATCHING IN <span id="dispatchCountdownNumber" class="text-red-400 font-mono text-3xl sm:text-4xl underline decoration-red-500">5</span>S...
-          </h2>
-          <p id="dispatchCountdownSubtitle" class="text-xs text-slate-300 mt-1.5 leading-relaxed">
-            Gesture / Trigger held. Acoustic emergency payload armed. Click CANCEL to abort transmission.
-          </p>
-        </div>
-
-        <!-- Animated Shrinking Progress Bar (5000ms countdown) -->
-        <div class="w-full bg-slate-800 h-3.5 rounded-full overflow-hidden border border-slate-700 p-0.5">
-          <div id="dispatchCountdownProgressBar" class="h-full bg-gradient-to-r from-red-500 via-rose-500 to-amber-400 rounded-full w-full transition-all duration-100 ease-linear"></div>
-        </div>
-
-        <!-- Big Bold CANCEL / UNDO Action Button -->
-        <button type="button" id="btnCancelDispatch" class="w-full py-4 px-6 rounded-2xl bg-white hover:bg-slate-200 text-slate-950 font-extrabold text-base tracking-wider uppercase transition-all shadow-xl shadow-white/10 active:scale-[0.98] flex items-center justify-center gap-2">
-          <i data-lucide="x-circle" class="w-5 h-5 text-red-600"></i>
-          <span>🛑 CANCEL / UNDO DISPATCH</span>
-        </button>
-
-        <p class="text-[10px] text-slate-500">Auto-transmitting across acoustic & mesh channels if not cancelled.</p>
-      </div>
     </div>
 
     <!-- Footer -->

@@ -1574,7 +1574,7 @@
   }
 
   /* -------------------------------------------------------------------------- */
-  /*                  SAFETY DISPATCH PIPELINE & GESTURE ENGINE                 */
+  /*                  INSTANT DISPATCH PIPELINE & GESTURE ENGINE                */
   /* -------------------------------------------------------------------------- */
 
   const SafetyPipeline = {
@@ -1585,51 +1585,21 @@
       handsDetector: null,
       currentDetectedGesture: null,
       holdStartTime: null,
-      holdDurationMs: 1500, // Exact 1.5s Threshold
+      holdDurationMs: 1500, // 1.5s Threshold
       isHolding: false,
       holdAnimFrameRef: null
     },
 
-    // 2. 5-Second Cancel / Undo Overlay State
-    cancelOverlay: {
-      isPending: false,
-      totalDurationMs: 5000,
-      remainingMs: 5000,
-      timerIntervalRef: null,
-      pendingPayload: null
-    },
-
-    // 3. 60-Second Anti-Spam Cooldown State
-    cooldown: {
-      isActive: false,
-      remainingSeconds: 60,
-      timerIntervalRef: null
-    },
-
-    // Clean up all timer handles to prevent memory leaks or stuck countdown states
+    // Clean up animation frames
     cleanupAllTimers() {
       if (this.gesture.holdAnimFrameRef) {
         cancelAnimationFrame(this.gesture.holdAnimFrameRef);
         this.gesture.holdAnimFrameRef = null;
       }
-      if (this.cancelOverlay.timerIntervalRef) {
-        clearInterval(this.cancelOverlay.timerIntervalRef);
-        this.cancelOverlay.timerIntervalRef = null;
-      }
-      if (this.cooldown.timerIntervalRef) {
-        clearInterval(this.cooldown.timerIntervalRef);
-        this.cooldown.timerIntervalRef = null;
-      }
     },
 
     // 1. GESTURE HOLD (1.5s Threshold)
     onGestureDetected(gestureName, rawLandmarks = null) {
-      if (this.cooldown.isActive || this.cancelOverlay.isPending) {
-        this.resetGestureHold();
-        return;
-      }
-
-      // If hand moved, changed gesture, or left frame -> IMMEDIATELY RESET
       if (!gestureName) {
         if (this.gesture.isHolding || this.gesture.holdStartTime) {
           this.resetGestureHold();
@@ -1675,8 +1645,8 @@
         if (percentText) percentText.textContent = `${Math.round(progress)}%`;
 
         if (elapsed >= this.gesture.holdDurationMs) {
-          // 1.5s Hold Complete! Trigger 5-Second Cancel Overlay
-          console.log(`[Safety Pipeline] 1.5s Hold Complete for gesture: ${gestureName}`);
+          // 1.5s Hold Complete! TRANSMIT IMMEDIATELY!
+          console.log(`[Safety Pipeline] 1.5s Hold Complete! Instant Dispatching gesture: ${gestureName}`);
           this.resetGestureHold();
           
           const distressType = gestureName === 'FIST' ? 2 : (gestureName === 'POINTING' ? 1 : 4);
@@ -1686,7 +1656,7 @@
             V_SIGN: 'GESTURE SOS: EVAC'
           };
 
-          this.initiateSafetyCancelOverlay({
+          executePanicSosDispatch({
             source: 'gesture',
             gestureName: gestureName,
             distressType: distressType,
@@ -1749,143 +1719,6 @@
         `;
         badge.className = 'text-[11px] font-mono px-2.5 py-1 rounded-lg bg-blue-950/80 text-blue-200 border border-blue-500/50 backdrop-blur-sm font-bold flex items-center gap-1.5';
       }
-    },
-
-    // 2. 5-SECOND CANCEL / UNDO OVERLAY
-    initiateSafetyCancelOverlay(payload) {
-      if (this.cooldown.isActive) {
-        alert(`Transmission locked: Anti-Spam cooldown is active (${this.cooldown.remainingSeconds}s remaining).`);
-        return;
-      }
-
-      this.cancelOverlay.isPending = true;
-      this.cancelOverlay.pendingPayload = payload;
-      this.cancelOverlay.remainingMs = 5000;
-
-      const overlay = document.getElementById('dispatchCancelOverlay');
-      const numEl = document.getElementById('dispatchCountdownNumber');
-      const barEl = document.getElementById('dispatchCountdownProgressBar');
-      const subtitleEl = document.getElementById('dispatchCountdownSubtitle');
-
-      if (overlay) overlay.classList.remove('hidden');
-      if (numEl) numEl.textContent = '5';
-      if (barEl) barEl.style.width = '100%';
-      if (subtitleEl) {
-        subtitleEl.textContent = payload.source === 'gesture' 
-          ? `Gesture [${payload.gestureName}] held for 1.5s. Armed for acoustic dispatch. Click CANCEL to abort.`
-          : `Distress alert armed. Click CANCEL to abort transmission.`;
-      }
-
-      if (this.cancelOverlay.timerIntervalRef) {
-        clearInterval(this.cancelOverlay.timerIntervalRef);
-      }
-
-      const startTime = Date.now();
-      const totalMs = 5000;
-
-      this.cancelOverlay.timerIntervalRef = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        const remainingMs = Math.max(0, totalMs - elapsed);
-        const remainingSeconds = Math.ceil(remainingMs / 1000);
-        const progressPercent = (remainingMs / totalMs) * 100;
-
-        if (numEl) numEl.textContent = remainingSeconds;
-        if (barEl) barEl.style.width = `${progressPercent}%`;
-
-        if (remainingMs <= 0) {
-          // Timer elapsed without cancellation! Execute automatic dispatch!
-          clearInterval(this.cancelOverlay.timerIntervalRef);
-          this.cancelOverlay.timerIntervalRef = null;
-          this.cancelOverlay.isPending = false;
-          if (overlay) overlay.classList.add('hidden');
-
-          this.executeDispatch(this.cancelOverlay.pendingPayload);
-        }
-      }, 50);
-    },
-
-    abortCancelOverlay() {
-      console.log('[Safety Pipeline] 🛑 User CANCELLED / UNDO Dispatch.');
-      if (this.cancelOverlay.timerIntervalRef) {
-        clearInterval(this.cancelOverlay.timerIntervalRef);
-        this.cancelOverlay.timerIntervalRef = null;
-      }
-      this.cancelOverlay.isPending = false;
-      this.cancelOverlay.pendingPayload = null;
-
-      const overlay = document.getElementById('dispatchCancelOverlay');
-      if (overlay) overlay.classList.add('hidden');
-
-      // Visual feedback
-      const trackingStatus = document.getElementById('senderTrackingStatusText');
-      if (trackingStatus) {
-        trackingStatus.innerHTML = `<span class="text-slate-400">Dispatch Aborted by User ✓ (Standby)</span>`;
-      }
-    },
-
-    // 3. DISPATCH EXECUTION & 60-SECOND ANTI-SPAM COOLDOWN
-    async executeDispatch(payload) {
-      console.log('[Safety Pipeline] 🚀 Transmitting verified emergency payload:', payload);
-
-      if (payload.source === 'panic' || payload.source === 'gesture') {
-        await executePanicSosDispatch(payload);
-      } else {
-        await executeRegularSosDispatch(payload);
-      }
-
-      // Enter 60-second cooldown immediately
-      this.startAntiSpamCooldown(60);
-    },
-
-    startAntiSpamCooldown(durationSeconds = 60) {
-      this.cooldown.isActive = true;
-      this.cooldown.remainingSeconds = durationSeconds;
-
-      const banner = document.getElementById('senderCooldownBanner');
-      const counter = document.getElementById('cooldownSecondsRemaining');
-      const btnPanic = document.getElementById('btnOneTapPanicSos');
-      const btnBroadcast = document.getElementById('btnSenderBroadcastSos');
-
-      if (banner) banner.classList.remove('hidden');
-      if (counter) counter.textContent = `${durationSeconds}s`;
-
-      // Lock buttons during 60s cooldown
-      if (btnPanic) {
-        btnPanic.disabled = true;
-        btnPanic.classList.add('opacity-50', 'pointer-events-none', 'grayscale');
-      }
-      if (btnBroadcast) {
-        btnBroadcast.disabled = true;
-        btnBroadcast.classList.add('opacity-50', 'pointer-events-none', 'grayscale');
-      }
-
-      if (this.cooldown.timerIntervalRef) {
-        clearInterval(this.cooldown.timerIntervalRef);
-      }
-
-      this.cooldown.timerIntervalRef = setInterval(() => {
-        this.cooldown.remainingSeconds--;
-
-        if (counter) counter.textContent = `${this.cooldown.remainingSeconds}s`;
-
-        if (this.cooldown.remainingSeconds <= 0) {
-          clearInterval(this.cooldown.timerIntervalRef);
-          this.cooldown.timerIntervalRef = null;
-          this.cooldown.isActive = false;
-
-          if (banner) banner.classList.add('hidden');
-          if (btnPanic) {
-            btnPanic.disabled = false;
-            btnPanic.classList.remove('opacity-50', 'pointer-events-none', 'grayscale');
-          }
-          if (btnBroadcast) {
-            btnBroadcast.disabled = false;
-            btnBroadcast.classList.remove('opacity-50', 'pointer-events-none', 'grayscale');
-          }
-
-          console.log('[Safety Pipeline] ⏳ 60-second Anti-Spam Cooldown Complete. Controls Re-enabled.');
-        }
-      }, 1000);
     }
   };
 
@@ -1893,7 +1726,7 @@
   /*                  ACTUAL PAYLOAD TRANSMISSION HANDLERS                      */
   /* -------------------------------------------------------------------------- */
 
-  async function executePanicSosDispatch(payload) {
+  async function executePanicSosDispatch(payload = {}) {
     acquireHighAccuracyGps();
 
     const messageId = PacketEngine.generateMessageId();
@@ -1961,7 +1794,7 @@
     }
   }
 
-  async function executeRegularSosDispatch(payload) {
+  async function executeRegularSosDispatch(payload = {}) {
     const latInput = document.getElementById('senderInputLat') || document.getElementById('meshInputLat');
     const lonInput = document.getElementById('senderInputLon') || document.getElementById('meshInputLon');
     const msgInput = document.getElementById('senderInputMessage') || document.getElementById('meshInputMessage');
@@ -2038,11 +1871,11 @@
   }
 
   /* -------------------------------------------------------------------------- */
-  /*               TRIGGER INITIATION THROUGH SAFETY PIPELINE                   */
+  /*               INSTANT DISPATCH HANDLERS (ZERO DELAY / ZERO LOCKOUT)        */
   /* -------------------------------------------------------------------------- */
 
   function handleOneTapPanicSos() {
-    SafetyPipeline.initiateSafetyCancelOverlay({
+    executePanicSosDispatch({
       source: 'panic',
       distressType: AppState.activeDistressType || 1,
       message: 'PANIC SOS: NEED RESCUE'
@@ -2051,7 +1884,7 @@
 
   function handleBroadcastSos(source) {
     const msg = document.getElementById('senderInputMessage')?.value || 'NEED RESCUE ASAP';
-    SafetyPipeline.initiateSafetyCancelOverlay({
+    executeRegularSosDispatch({
       source: 'regular',
       distressType: AppState.activeDistressType || 1,
       message: msg
