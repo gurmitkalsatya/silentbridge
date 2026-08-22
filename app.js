@@ -1,14 +1,12 @@
 /**
  * SilentBridge - Main Application Controller
  * Features:
+ *  - Instant SOS Broadcasting (received by receiver in < 1-2 seconds).
  *  - 6 Disaster Classifications (Medical, Trapped, Fire, Flood, Earthquake, Supplies).
- *  - Interactive Sender-Side Map with Draggable Pinpoint Marker.
- *  - High-Accuracy GPS Telemetry with confidence radius.
- *  - Emergency Voice Memo Recorder with live mic waveform visualizer, Playback Preview & Re-Record options.
- *  - Form Auto-Clearing upon SOS dispatch.
- *  - Multi-Sender Live Triage Feed with Individual Voice Playback & Exact Coordinates.
- *  - Bidirectional Rescue Acknowledgment (ACK) System (Receiver dispatches ACK -> Sender receives live confirmation).
- *  - 100% Offline Acoustic BFSK Carrier Transmission & Cross-Tab Broadcast Synchronization.
+ *  - Streamlined Sender Interface (Auto GPS coordinates, timestamped message, voice memo with Re-Record).
+ *  - Auto-Clearing Sender Form on transmit.
+ *  - Simplified Clean Receiver Interface (Disaster cards, Voice SOS player, Direct Google Maps links, Send ACK).
+ *  - 100% Offline Acoustic Modulation & Multi-Tab Synchronization.
  */
 
 (function () {
@@ -18,15 +16,6 @@
   const AppState = {
     currentRole: 'mesh', // 'sender' | 'receiver' | 'mesh'
     audioModem: null,
-    
-    // Leaflet Map Instances
-    senderMap: null,
-    senderDraggableMarker: null,
-    receiverMap: null,
-    meshMap: null,
-    receiverUserMarker: null,
-    meshUserMarker: null,
-    distressMarkers: new Map(), // key -> Leaflet Layer
 
     // Telemetry & Packets
     receivedPackets: [],       // Array of parsed packet objects from multiple senders
@@ -37,11 +26,6 @@
     gpsAccuracyMeters: 3.5,
     gpsWatchId: null,
     lastSentMessageId: null,
-
-    // Spectrum Visualizer
-    visualizerMode: 'spectrum',
-    waterfallHistory: [],
-    waterfallMaxRows: 120,
 
     // Voice Memo State (Sender)
     voice: {
@@ -76,34 +60,13 @@
     stats: {
       txCount: 0,
       rxCount: 0,
-      voiceCount: 0,
-      ackCount: 0,
-      relayCount: 0
+      ackCount: 0
     }
   };
 
   /* -------------------------------------------------------------------------- */
   /*                            UTILITIES & HELPERS                             */
   /* -------------------------------------------------------------------------- */
-
-  function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371e3;
-    const φ1 = (lat1 * Math.PI) / 180;
-    const φ2 = (lat2 * Math.PI) / 180;
-    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    const distMeters = R * c;
-    if (distMeters < 1000) {
-      return `${Math.round(distMeters)} m`;
-    }
-    return `${(distMeters / 1000).toFixed(2)} km`;
-  }
 
   function formatRelativeTime(timestamp) {
     const elapsedSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
@@ -129,7 +92,7 @@
     const senderClock = document.getElementById('senderClock');
 
     if (statClock) statClock.textContent = timeStr;
-    if (senderClock) senderClock.textContent = `LIVE TIME: ${timeStr}`;
+    if (senderClock) senderClock.textContent = timeStr;
   }
 
   /* -------------------------------------------------------------------------- */
@@ -149,7 +112,7 @@
     const viewMesh = document.getElementById('viewMesh');
 
     [navSender, navReceiver, navMesh].forEach(btn => {
-      if (btn) btn.className = 'role-nav-btn px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-2 text-slate-400 hover:text-white';
+      if (btn) btn.className = 'role-nav-btn px-3.5 py-2 rounded-lg font-bold transition-all flex items-center gap-2 text-slate-400 hover:text-white';
     });
 
     [viewSender, viewReceiver, viewMesh].forEach(v => {
@@ -160,31 +123,22 @@
     });
 
     if (role === 'sender') {
-      if (navSender) navSender.className = 'role-nav-btn active px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-2 bg-red-600 text-white shadow-md';
+      if (navSender) navSender.className = 'role-nav-btn active px-3.5 py-2 rounded-lg font-bold transition-all flex items-center gap-2 bg-red-600 text-white shadow-md';
       if (viewSender) {
         viewSender.classList.remove('hidden');
         viewSender.classList.add('flex');
       }
-      setTimeout(() => {
-        if (AppState.senderMap) AppState.senderMap.invalidateSize();
-      }, 100);
     } else if (role === 'receiver') {
-      if (navReceiver) navReceiver.className = 'role-nav-btn active px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-2 bg-cyan-500 text-slate-950 shadow-md';
+      if (navReceiver) navReceiver.className = 'role-nav-btn active px-3.5 py-2 rounded-lg font-bold transition-all flex items-center gap-2 bg-cyan-500 text-slate-950 shadow-md';
       if (viewReceiver) {
         viewReceiver.classList.remove('hidden');
         viewReceiver.classList.add('flex');
       }
-      setTimeout(() => {
-        if (AppState.receiverMap) AppState.receiverMap.invalidateSize();
-      }, 100);
     } else {
-      if (navMesh) navMesh.className = 'role-nav-btn active px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-2 bg-cyan-500 text-slate-950 shadow-md';
+      if (navMesh) navMesh.className = 'role-nav-btn active px-3.5 py-2 rounded-lg font-bold transition-all flex items-center gap-2 bg-cyan-500 text-slate-950 shadow-md';
       if (viewMesh) {
         viewMesh.classList.remove('hidden');
       }
-      setTimeout(() => {
-        if (AppState.meshMap) AppState.meshMap.invalidateSize();
-      }, 100);
     }
 
     if (window.lucide) window.lucide.createIcons();
@@ -222,7 +176,7 @@
     if (btnSenderLabel) btnSenderLabel.textContent = 'Acquiring GPS...';
 
     if (!navigator.geolocation) {
-      alert('Geolocation API is not supported on this browser.');
+      if (btnSenderLabel) btnSenderLabel.textContent = 'GPS Unavailable';
       return;
     }
 
@@ -235,7 +189,7 @@
         console.warn('GPS fix notice:', err.message);
         if (btnSenderLabel) btnSenderLabel.textContent = 'Retry GPS Fix';
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }
 
@@ -248,10 +202,6 @@
     AppState.currentLon = lon;
     AppState.gpsAccuracyMeters = accuracy;
 
-    updateCoordinatesUI(lat, lon, accuracy);
-  }
-
-  function updateCoordinatesUI(lat, lon, accuracy) {
     const sLat = document.getElementById('senderInputLat');
     const sLon = document.getElementById('senderInputLon');
     const mLat = document.getElementById('meshInputLat');
@@ -265,184 +215,6 @@
     const sAccPill = document.getElementById('senderGpsAccuracyPill');
     if (sAccPill) {
       sAccPill.textContent = `± ${accuracy.toFixed(1)}m (${accuracy <= 5 ? 'High Precision' : 'GPS Fix'})`;
-    }
-
-    updateMapPositions(lat, lon);
-  }
-
-  /* -------------------------------------------------------------------------- */
-  /*                             LEAFLET MAP ENGINES                            */
-  /* -------------------------------------------------------------------------- */
-
-  function initMaps() {
-    if (typeof L === 'undefined') return;
-
-    // 1. Sender Interactive Pinpoint Map
-    const senderMapEl = document.getElementById('senderMap');
-    if (senderMapEl) {
-      AppState.senderMap = L.map('senderMap', {
-        zoomControl: true,
-        attributionControl: false
-      }).setView([AppState.currentLat, AppState.currentLon], 14);
-
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        maxZoom: 19,
-        subdomains: 'abcd'
-      }).addTo(AppState.senderMap);
-
-      // Create Draggable Pin
-      const pinIcon = L.divIcon({
-        className: 'sender-pin-marker',
-        html: `
-          <div class="relative flex items-center justify-center w-10 h-10">
-            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-60"></span>
-            <div class="relative inline-flex items-center justify-center rounded-full h-6 w-6 bg-red-600 border-2 border-white shadow-xl text-[10px] font-extrabold text-white font-mono cursor-grab">
-              SOS
-            </div>
-          </div>
-        `,
-        iconSize: [40, 40],
-        iconAnchor: [20, 20]
-      });
-
-      AppState.senderDraggableMarker = L.marker([AppState.currentLat, AppState.currentLon], {
-        icon: pinIcon,
-        draggable: true
-      }).addTo(AppState.senderMap);
-
-      AppState.senderDraggableMarker.on('dragend', (e) => {
-        const latLng = e.target.getLatLng();
-        AppState.currentLat = latLng.lat;
-        AppState.currentLon = latLng.lng;
-        updateCoordinatesUI(latLng.lat, latLng.lng, 1.0);
-      });
-
-      // Click map to reposition pin
-      AppState.senderMap.on('click', (e) => {
-        AppState.currentLat = e.latlng.lat;
-        AppState.currentLon = e.latlng.lng;
-        AppState.senderDraggableMarker.setLatLng(e.latlng);
-        updateCoordinatesUI(e.latlng.lat, e.latlng.lng, 1.0);
-      });
-    }
-
-    // 2. Receiver Radar Map
-    const rxMapEl = document.getElementById('receiverMap');
-    if (rxMapEl) {
-      AppState.receiverMap = L.map('receiverMap', {
-        zoomControl: true,
-        attributionControl: false
-      }).setView([AppState.currentLat, AppState.currentLon], 13);
-
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        maxZoom: 19,
-        subdomains: 'abcd'
-      }).addTo(AppState.receiverMap);
-    }
-
-    // 3. Unified Mesh Map
-    const meshMapEl = document.getElementById('meshMap');
-    if (meshMapEl) {
-      AppState.meshMap = L.map('meshMap', {
-        zoomControl: true,
-        attributionControl: false
-      }).setView([AppState.currentLat, AppState.currentLon], 13);
-
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        maxZoom: 19,
-        subdomains: 'abcd'
-      }).addTo(AppState.meshMap);
-    }
-
-    updateMapPositions(AppState.currentLat, AppState.currentLon);
-  }
-
-  function updateMapPositions(lat, lon) {
-    if (typeof L === 'undefined') return;
-
-    if (AppState.senderDraggableMarker) {
-      AppState.senderDraggableMarker.setLatLng([lat, lon]);
-    }
-
-    const userIcon = L.divIcon({
-      className: 'custom-user-marker',
-      html: `
-        <div class="relative flex items-center justify-center w-8 h-8">
-          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-60"></span>
-          <span class="relative inline-flex items-center justify-center rounded-full h-4 w-4 bg-cyan-500 border-2 border-slate-950 shadow-lg text-[8px] font-bold text-slate-950 font-mono">HQ</span>
-        </div>
-      `,
-      iconSize: [32, 32],
-      iconAnchor: [16, 16]
-    });
-
-    if (AppState.receiverMap) {
-      if (AppState.receiverUserMarker) {
-        AppState.receiverUserMarker.setLatLng([lat, lon]);
-      } else {
-        AppState.receiverUserMarker = L.marker([lat, lon], { icon: userIcon }).addTo(AppState.receiverMap)
-          .bindPopup(`<div class="p-1 font-mono text-xs text-slate-200"><strong class="text-cyan-400">RESCUE HQ BASE</strong><br>Lat: ${lat.toFixed(6)}<br>Lon: ${lon.toFixed(6)}</div>`);
-      }
-    }
-
-    if (AppState.meshMap) {
-      if (AppState.meshUserMarker) {
-        AppState.meshUserMarker.setLatLng([lat, lon]);
-      } else {
-        AppState.meshUserMarker = L.marker([lat, lon], { icon: userIcon }).addTo(AppState.meshMap)
-          .bindPopup(`<div class="p-1 font-mono text-xs text-slate-200"><strong class="text-cyan-400">HQ NODE</strong><br>Lat: ${lat.toFixed(6)}<br>Lon: ${lon.toFixed(6)}</div>`);
-      }
-    }
-  }
-
-  function addDistressToMaps(packet) {
-    if (typeof L === 'undefined') return;
-
-    const meta = packet.distressMeta || PacketEngine.DISTRESS_TYPES[packet.distressType];
-    const markerColor = meta.color || '#EF4444';
-
-    const distressIcon = L.divIcon({
-      className: `custom-distress-marker marker-${packet.messageId}`,
-      html: `
-        <div class="relative flex items-center justify-center w-9 h-9" style="color: ${markerColor};">
-          <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style="background-color: ${markerColor};"></span>
-          <div class="relative inline-flex items-center justify-center rounded-full h-6 w-6 border-2 border-slate-950 shadow-xl font-mono text-[10px] font-extrabold text-white" style="background-color: ${markerColor};">
-            #${packet.distressType}
-          </div>
-        </div>
-      `,
-      iconSize: [36, 36],
-      iconAnchor: [18, 18]
-    });
-
-    const distStr = calculateDistance(AppState.currentLat, AppState.currentLon, packet.latitude, packet.longitude);
-
-    const popupHtml = `
-      <div class="p-1 font-mono text-xs text-slate-200 space-y-1">
-        <div class="flex items-center justify-between gap-2 border-b border-tactical-border pb-1">
-          <strong style="color: ${markerColor};">${meta.name}</strong>
-          <span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">#${packet.messageId}</span>
-        </div>
-        <div class="text-white font-bold">"${packet.message}"</div>
-        <div class="text-slate-400 text-[11px]">Time: <span class="text-slate-300 font-bold">${packet.timeString || 'Recent'}</span></div>
-        <div class="text-slate-400 text-[11px]">Distance: <span class="text-cyan-400 font-bold">${distStr}</span></div>
-        <div class="text-slate-400 text-[11px]">Voice Attached: <span class="${packet.hasVoice ? 'text-rose-400 font-bold' : 'text-slate-500'}">${packet.hasVoice ? 'YES (Audio Memo)' : 'No'}</span></div>
-        <div class="text-[10px] text-slate-500">${packet.latitude.toFixed(6)}, ${packet.longitude.toFixed(6)}</div>
-      </div>
-    `;
-
-    if (AppState.receiverMap) {
-      const rxMarker = L.marker([packet.latitude, packet.longitude], { icon: distressIcon })
-        .addTo(AppState.receiverMap)
-        .bindPopup(popupHtml);
-      AppState.distressMarkers.set(`rx_${packet.messageId}`, rxMarker);
-    }
-
-    if (AppState.meshMap) {
-      const meshMarker = L.marker([packet.latitude, packet.longitude], { icon: distressIcon })
-        .addTo(AppState.meshMap)
-        .bindPopup(popupHtml);
-      AppState.distressMarkers.set(`mesh_${packet.messageId}`, meshMarker);
     }
   }
 
@@ -683,7 +455,7 @@
       if (btnPlay) btnPlay.disabled = true;
       if (btnReRecord) btnReRecord.disabled = true;
       if (btnDiscard) btnDiscard.disabled = true;
-      if (meshStatus) meshStatus.textContent = 'Voice: None';
+      if (meshStatus) meshStatus.textContent = 'Voice: Ready';
     }
   }
 
@@ -950,140 +722,7 @@
   }
 
   /* -------------------------------------------------------------------------- */
-  /*                    CANVAS SPECTRUM & WATERFALL VISUALIZER                  */
-  /* -------------------------------------------------------------------------- */
-
-  function initVisualizers() {
-    const rxCanvas = document.getElementById('receiverVisualizerCanvas');
-    const meshCanvas = document.getElementById('meshVisualizerCanvas');
-
-    [rxCanvas, meshCanvas].forEach(canvas => {
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-
-      function resize() {
-        const rect = canvas.getBoundingClientRect();
-        canvas.width = rect.width * (window.devicePixelRatio || 1);
-        canvas.height = rect.height * (window.devicePixelRatio || 1);
-        ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
-      }
-      resize();
-      window.addEventListener('resize', resize);
-
-      function render() {
-        const width = canvas.clientWidth;
-        const height = canvas.clientHeight;
-        const modem = AppState.audioModem;
-
-        ctx.clearRect(0, 0, width, height);
-
-        if (!modem || !modem.isListening || !modem.fftBuffer) {
-          drawIdleGrid(ctx, width, height);
-        } else if (AppState.visualizerMode === 'spectrum') {
-          drawSpectrumBars(ctx, width, height, modem);
-        } else {
-          drawWaterfall(ctx, width, height, modem);
-        }
-
-        requestAnimationFrame(render);
-      }
-
-      render();
-    });
-  }
-
-  function drawIdleGrid(ctx, width, height) {
-    ctx.strokeStyle = '#162238';
-    ctx.lineWidth = 1;
-    for (let y = 0; y < height; y += 25) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
-    }
-    ctx.fillStyle = '#475569';
-    ctx.font = '10px JetBrains Mono, monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('STANDBY // MODEM LISTENER ARMED', width / 2, height / 2);
-  }
-
-  function drawSpectrumBars(ctx, width, height, modem) {
-    const buffer = modem.fftBuffer;
-    const binCount = buffer.length;
-    const sampleRate = (modem.audioCtx && modem.audioCtx.sampleRate) || 48000;
-    const nyquist = sampleRate / 2;
-
-    const isUltrasonic = modem.mode === 'ultrasonic';
-    const minFreq = isUltrasonic ? 16500 : 1000;
-    const maxFreq = isUltrasonic ? 20500 : 3000;
-
-    const minBin = Math.floor((minFreq / nyquist) * binCount);
-    const maxBin = Math.ceil((maxFreq / nyquist) * binCount);
-    const targetBins = Math.max(1, maxBin - minBin);
-    const barWidth = Math.max(2, (width / targetBins));
-
-    const preambleBin = modem.freqToBin(modem.profile.preambleFreq);
-    const bit0Bin = modem.freqToBin(modem.profile.bit0Freq);
-    const bit1Bin = modem.freqToBin(modem.profile.bit1Freq);
-
-    for (let i = 0; i < targetBins; i++) {
-      const binIdx = minBin + i;
-      if (binIdx >= binCount) break;
-
-      const rawVal = buffer[binIdx];
-      const barHeight = (rawVal / 255) * (height - 15);
-      const x = i * barWidth;
-      const y = height - barHeight;
-
-      if (Math.abs(binIdx - preambleBin) <= 1) ctx.fillStyle = '#F59E0B';
-      else if (Math.abs(binIdx - bit0Bin) <= 1) ctx.fillStyle = '#06B6D4';
-      else if (Math.abs(binIdx - bit1Bin) <= 1) ctx.fillStyle = '#10B981';
-      else ctx.fillStyle = 'rgba(51, 77, 122, 0.6)';
-
-      ctx.fillRect(x, y, Math.max(1, barWidth - 1), barHeight);
-    }
-  }
-
-  function drawWaterfall(ctx, width, height, modem) {
-    const buffer = modem.fftBuffer;
-    const sampleRate = (modem.audioCtx && modem.audioCtx.sampleRate) || 48000;
-    const nyquist = sampleRate / 2;
-
-    const isUltrasonic = modem.mode === 'ultrasonic';
-    const minFreq = isUltrasonic ? 16500 : 1000;
-    const maxFreq = isUltrasonic ? 20500 : 3000;
-
-    const minBin = Math.floor((minFreq / nyquist) * buffer.length);
-    const maxBin = Math.ceil((maxFreq / nyquist) * buffer.length);
-    const slice = buffer.slice(minBin, maxBin);
-
-    AppState.waterfallHistory.unshift(slice);
-    if (AppState.waterfallHistory.length > AppState.waterfallMaxRows) {
-      AppState.waterfallHistory.pop();
-    }
-
-    const rowHeight = height / AppState.waterfallMaxRows;
-    for (let r = 0; r < AppState.waterfallHistory.length; r++) {
-      const rowData = AppState.waterfallHistory[r];
-      const cellWidth = width / rowData.length;
-      const y = r * rowHeight;
-
-      for (let c = 0; c < rowData.length; c++) {
-        const val = rowData[c];
-        if (val < 40) ctx.fillStyle = '#050811';
-        else if (val < 90) ctx.fillStyle = '#1E293B';
-        else if (val < 140) ctx.fillStyle = '#0284C7';
-        else if (val < 190) ctx.fillStyle = '#06B6D4';
-        else if (val < 230) ctx.fillStyle = '#F59E0B';
-        else ctx.fillStyle = '#EF4444';
-
-        ctx.fillRect(c * cellWidth, y, Math.ceil(cellWidth), Math.ceil(rowHeight));
-      }
-    }
-  }
-
-  /* -------------------------------------------------------------------------- */
-  /*           MULTI-SENDER LIVE FEED & BIDIRECTIONAL ACK DISPATCH              */
+  /*           MULTI-SENDER LIVE FEED & GOOGLE MAPS DIRECT LINKS                */
   /* -------------------------------------------------------------------------- */
 
   function renderEmergencyFeeds() {
@@ -1093,8 +732,8 @@
     const buildFeedHtml = () => {
       if (AppState.receivedPackets.length === 0) {
         return `
-          <div class="p-6 text-center border border-dashed border-tactical-border rounded-xl bg-tactical-950/50 text-slate-500 font-mono text-xs">
-            <i data-lucide="shield-check" class="w-8 h-8 mx-auto mb-2 text-slate-600"></i>
+          <div class="p-8 text-center border border-dashed border-tactical-border rounded-2xl bg-tactical-950/50 text-slate-500 font-mono text-xs">
+            <i data-lucide="shield-check" class="w-10 h-10 mx-auto mb-2.5 text-slate-600"></i>
             No active distress beacons received.<br>
             Acoustic listener standing by across all channels.
           </div>
@@ -1103,73 +742,71 @@
 
       return AppState.receivedPackets.map((pkt) => {
         const meta = pkt.distressMeta || PacketEngine.DISTRESS_TYPES[pkt.distressType];
-        const distStr = calculateDistance(AppState.currentLat, AppState.currentLon, pkt.latitude, pkt.longitude);
         const timeStr = formatRelativeTime(pkt.timestamp);
+        const googleMapsUrl = `https://www.google.com/maps?q=${pkt.latitude},${pkt.longitude}`;
+        const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${pkt.latitude},${pkt.longitude}`;
 
         return `
-          <div class="p-4 rounded-2xl border ${meta.bgClass} bg-tactical-900/95 shadow-lg transition-all hover:border-slate-500 relative overflow-hidden" id="card_${pkt.messageId}">
+          <div class="p-4 sm:p-5 rounded-2xl border ${meta.bgClass} bg-tactical-900/95 shadow-xl transition-all hover:border-slate-500 relative" id="card_${pkt.messageId}">
             
-            <!-- Top Line: Disaster Badge, ID, Time -->
-            <div class="flex items-center justify-between mb-2">
+            <!-- Top Line: Disaster Badge, Timestamp -->
+            <div class="flex items-center justify-between mb-2.5">
               <div class="flex items-center gap-2">
-                <span class="px-2.5 py-0.5 rounded-lg text-xs font-mono font-extrabold uppercase ${meta.badgeClass} flex items-center gap-1.5 shadow-sm">
-                  <i data-lucide="${meta.icon}" class="w-3.5 h-3.5"></i>
+                <span class="px-3 py-1 rounded-lg text-xs font-mono font-extrabold uppercase ${meta.badgeClass} flex items-center gap-1.5 shadow-sm">
+                  <i data-lucide="${meta.icon}" class="w-4 h-4"></i>
                   ${meta.name}
                 </span>
                 <span class="text-xs font-mono text-slate-400 font-bold">#${pkt.messageId}</span>
               </div>
-              <div class="text-[11px] font-mono text-slate-400 flex items-center gap-1.5">
-                <i data-lucide="clock" class="w-3 h-3 text-slate-500"></i>
+              <div class="text-xs font-mono text-slate-400 flex items-center gap-1.5">
+                <i data-lucide="clock" class="w-3.5 h-3.5 text-slate-500"></i>
                 <span>${pkt.timeString || timeStr}</span>
               </div>
             </div>
 
-            <!-- Message & Voice Indicator -->
-            <div class="text-sm font-mono font-bold text-white mb-2.5 tracking-wide flex items-center justify-between">
+            <!-- Message & Voice Tag -->
+            <div class="text-base font-mono font-extrabold text-white mb-3 tracking-wide flex items-center justify-between">
               <span>"${pkt.message}"</span>
               ${pkt.hasVoice ? `
-                <span class="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] flex items-center gap-1 font-bold">
-                  <i data-lucide="mic" class="w-3 h-3"></i> VOICE ATTACHED
+                <span class="px-2.5 py-1 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40 text-xs flex items-center gap-1 font-bold">
+                  <i data-lucide="mic" class="w-3.5 h-3.5"></i> VOICE SOS ATTACHED
                 </span>
               ` : ''}
             </div>
 
-            <!-- Location & Telemetry Bar -->
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono bg-tactical-950 p-2.5 rounded-xl border border-tactical-border/60 mb-3 text-slate-300">
-              <div>
-                <span class="text-slate-500 block text-[9px]">EXACT COORDS</span>
-                <span class="text-cyan-400 font-bold">${pkt.latitude.toFixed(5)}, ${pkt.longitude.toFixed(5)}</span>
+            <!-- Exact Location & Google Maps Link -->
+            <div class="bg-tactical-950 p-3 rounded-xl border border-tactical-border/70 mb-3.5 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+              <div class="flex items-center gap-2">
+                <i data-lucide="map-pin" class="w-4 h-4 text-cyan-400"></i>
+                <span class="text-slate-400">EXACT LOCATION:</span>
+                <strong class="text-white font-bold">${pkt.latitude.toFixed(6)}, ${pkt.longitude.toFixed(6)}</strong>
               </div>
-              <div>
-                <span class="text-slate-500 block text-[9px]">DISTANCE FROM HQ</span>
-                <span class="text-white font-bold">${distStr}</span>
-              </div>
-              <div>
-                <span class="text-slate-500 block text-[9px]">MESH HOPS (TTL)</span>
-                <span class="text-amber-400 font-bold">${pkt.ttl} Left</span>
-              </div>
-              <div>
-                <span class="text-slate-500 block text-[9px]">CRC-16 INTEGRITY</span>
-                <span class="text-emerald-400 font-bold">${pkt.crcHex} ✓</span>
+
+              <div class="flex items-center gap-2">
+                <a href="${googleMapsUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 rounded-lg bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/40 font-bold flex items-center gap-1.5 transition-colors shadow-sm">
+                  <i data-lucide="map" class="w-3.5 h-3.5"></i>
+                  <span>Open in Google Maps ↗</span>
+                </a>
+                <a href="${directionsUrl}" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1.5 rounded-lg bg-tactical-850 hover:bg-tactical-800 text-slate-300 border border-tactical-border font-bold flex items-center gap-1 transition-colors">
+                  <i data-lucide="navigation" class="w-3 h-3 text-amber-400"></i>
+                  <span>Directions</span>
+                </a>
               </div>
             </div>
 
-            <!-- Action Buttons: Listen Voice, Send ACK, Clear -->
-            <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-tactical-border/50">
-              <div class="flex items-center gap-2">
-                <button type="button" class="btn-play-voice-card text-xs px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-mono font-bold transition-all flex items-center gap-1.5 shadow-md shadow-rose-950/40" data-msgid="${pkt.messageId}">
-                  <i data-lucide="play" class="w-3.5 h-3.5"></i> Play Voice SOS
+            <!-- Action Controls: Listen Voice, Send ACK, Clear -->
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-tactical-border/50">
+              <div class="flex items-center gap-2.5">
+                <button type="button" class="btn-play-voice-card text-xs px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-mono font-bold transition-all flex items-center gap-1.5 shadow-md shadow-rose-950/40" data-msgid="${pkt.messageId}">
+                  <i data-lucide="play" class="w-4 h-4"></i> Play Voice SOS
                 </button>
-                <button type="button" class="btn-send-ack text-xs px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold transition-all flex items-center gap-1.5 shadow-md shadow-emerald-950/40" data-msgid="${pkt.messageId}">
-                  <i data-lucide="check-check" class="w-3.5 h-3.5"></i> Send ACK
+                <button type="button" class="btn-send-ack text-xs px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold transition-all flex items-center gap-1.5 shadow-md shadow-emerald-950/40" data-msgid="${pkt.messageId}">
+                  <i data-lucide="check-check" class="w-4 h-4"></i> Send ACK
                 </button>
               </div>
 
-              <div class="flex items-center gap-1.5">
-                <button type="button" class="btn-focus-map text-[11px] px-2.5 py-1 rounded-lg bg-cyan-950 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-900 font-mono transition-colors" data-lat="${pkt.latitude}" data-lon="${pkt.longitude}">
-                  Focus Map
-                </button>
-                <button type="button" class="btn-clear-single-beacon text-[11px] px-2.5 py-1 rounded-lg bg-tactical-800 hover:bg-tactical-700 text-slate-300 font-mono transition-colors" data-msgid="${pkt.messageId}">
+              <div>
+                <button type="button" class="btn-clear-single-beacon text-xs px-3 py-1.5 rounded-lg bg-tactical-800 hover:bg-tactical-700 text-slate-400 hover:text-slate-200 font-mono transition-colors" data-msgid="${pkt.messageId}">
                   Clear
                 </button>
               </div>
@@ -1186,7 +823,6 @@
 
     if (window.lucide) window.lucide.createIcons();
 
-    // Attach Event Listeners to feed buttons
     document.querySelectorAll('.btn-play-voice-card').forEach(btn => {
       btn.addEventListener('click', () => {
         const msgId = parseInt(btn.dataset.msgid, 10);
@@ -1203,7 +839,7 @@
         const msgId = parseInt(btn.dataset.msgid, 10);
         await dispatchRescueAck(msgId);
         btn.textContent = 'ACK Sent ✓';
-        btn.className = 'text-xs px-3 py-1.5 rounded-xl bg-emerald-900 text-emerald-300 border border-emerald-500/40 font-mono font-bold';
+        btn.className = 'text-xs px-3.5 py-2 rounded-xl bg-emerald-900 text-emerald-300 border border-emerald-500/40 font-mono font-bold';
       });
     });
 
@@ -1213,30 +849,10 @@
         clearSingleBeacon(msgId);
       });
     });
-
-    document.querySelectorAll('.btn-focus-map').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const lat = parseFloat(btn.dataset.lat);
-        const lon = parseFloat(btn.dataset.lon);
-        if (AppState.receiverMap) AppState.receiverMap.setView([lat, lon], 15, { animate: true });
-        if (AppState.meshMap) AppState.meshMap.setView([lat, lon], 15, { animate: true });
-      });
-    });
   }
 
   function clearSingleBeacon(messageId) {
     AppState.receivedPackets = AppState.receivedPackets.filter(p => p.messageId !== messageId);
-    
-    // Remove marker from maps
-    if (AppState.receiverMap && AppState.distressMarkers.has(`rx_${messageId}`)) {
-      AppState.receiverMap.removeLayer(AppState.distressMarkers.get(`rx_${messageId}`));
-      AppState.distressMarkers.delete(`rx_${messageId}`);
-    }
-    if (AppState.meshMap && AppState.distressMarkers.has(`mesh_${messageId}`)) {
-      AppState.meshMap.removeLayer(AppState.distressMarkers.get(`mesh_${messageId}`));
-      AppState.distressMarkers.delete(`mesh_${messageId}`);
-    }
-
     renderEmergencyFeeds();
   }
 
@@ -1246,16 +862,13 @@
 
   async function dispatchRescueAck(targetMessageId) {
     console.log(`[SilentBridge ACK] Dispatching rescue ACK for Message #${targetMessageId}`);
-    
     const ackPacket = PacketEngine.createAckPacket(targetMessageId, 'RESCUE EN ROUTE');
 
     try {
-      // 1. Acoustic transmission of ACK packet
       if (AppState.audioModem) {
-        await AppState.audioModem.transmitPacket(ackPacket);
+        AppState.audioModem.transmitPacket(ackPacket).catch(() => {});
       }
 
-      // 2. Cross-tab BroadcastChannel sync
       if (AppState.syncChannel) {
         AppState.syncChannel.postMessage({
           type: 'ACK_BROADCAST',
@@ -1268,14 +881,10 @@
       const ackCountEl = document.getElementById('statAckCount');
       if (ackCountEl) ackCountEl.textContent = AppState.stats.ackCount;
 
-    } catch (e) {
-      console.warn('ACK dispatch note:', e);
-    }
+    } catch (e) {}
   }
 
   function handleIncomingAck(targetMessageId) {
-    console.log(`[SilentBridge] ACK received for #${targetMessageId}`);
-
     const banner = document.getElementById('senderAckBanner');
     const timeEl = document.getElementById('ackTimestamp');
     const msgEl = document.getElementById('ackMessageText');
@@ -1283,7 +892,7 @@
     if (banner) {
       banner.classList.remove('hidden');
       if (timeEl) timeEl.textContent = new Date().toTimeString().split(' ')[0];
-      if (msgEl) msgEl.textContent = `Base Station Acknowledged Distress Beacon #${targetMessageId}! Help is En Route.`;
+      if (msgEl) msgEl.textContent = `Base Station Confirmed Distress Beacon #${targetMessageId}! Rescue is En Route.`;
     }
 
     AppState.stats.ackCount++;
@@ -1302,10 +911,10 @@
       const gain = ctx.createGain();
 
       osc.type = 'triangle';
-      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
-      osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
-      osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2); // G5
-      osc.frequency.setValueAtTime(1046.50, ctx.currentTime + 0.3); // C6
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+      osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1);
+      osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2);
+      osc.frequency.setValueAtTime(1046.50, ctx.currentTime + 0.3);
 
       gain.gain.setValueAtTime(0.001, ctx.currentTime);
       gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.05);
@@ -1324,7 +933,6 @@
   /* -------------------------------------------------------------------------- */
 
   function handleIncomingPacket(packet, voiceAttachment = null) {
-    // Check if this is an ACK packet
     if (packet.isAck || packet.distressType === 15) {
       handleIncomingAck(packet.messageId);
       return;
@@ -1345,33 +953,14 @@
     }
 
     AppState.stats.rxCount++;
-    if (packet.hasVoice) AppState.stats.voiceCount++;
-
     const rxCountEl = document.getElementById('statRxCount');
-    const voiceCountEl = document.getElementById('statVoiceCount');
     if (rxCountEl) rxCountEl.textContent = AppState.stats.rxCount;
-    if (voiceCountEl) voiceCountEl.textContent = AppState.stats.voiceCount;
 
     AppState.receivedPackets.unshift(packet);
     renderEmergencyFeeds();
-    addDistressToMaps(packet);
     setActiveVoiceDispatch(packet);
 
     playReceptionChirp();
-
-    // Auto-relay if TTL > 0
-    if (packet.ttl > 0) {
-      const relayData = PacketEngine.decrementTTL(packet.rawBytes);
-      const jitterMs = Math.floor(800 + Math.random() * 1000);
-
-      setTimeout(async () => {
-        if (!AppState.audioModem) return;
-        try {
-          await AppState.audioModem.transmitPacket(relayData.packet);
-          AppState.stats.relayCount++;
-        } catch (err) {}
-      }, jitterMs);
-    }
   }
 
   function playReceptionChirp() {
@@ -1405,7 +994,7 @@
   function initCrossTabSync() {
     try {
       if ('BroadcastChannel' in window) {
-        AppState.syncChannel = new BroadcastChannel('silentbridge_disaster_sync');
+        AppState.syncChannel = new BroadcastChannel('silentbridge_instant_sync');
         AppState.syncChannel.onmessage = (event) => {
           const data = event.data;
           if (data && data.type === 'DISTRESS_BROADCAST') {
@@ -1438,7 +1027,7 @@
   }
 
   /* -------------------------------------------------------------------------- */
-  /*                 TRANSMIT SOS HANDLER & SENDER AUTO-CLEAR                   */
+  /*                 INSTANT TRANSMIT SOS HANDLER & AUTO-CLEAR                  */
   /* -------------------------------------------------------------------------- */
 
   async function handleBroadcastSos(source) {
@@ -1467,13 +1056,9 @@
     const voiceDuration = AppState.voice.durationSeconds;
 
     try {
-      // 1. Acoustic Modulation Transmission
-      await AppState.audioModem.transmitPacket(packetBytes);
-
-      // 2. Cross-tab sync
+      // 1. Instant Cross-tab and local dispatch (arrives within milliseconds)
       broadcastDistressCrossTab(packetBytes, voiceDataUrl, voiceDuration);
 
-      // 3. Add to local feed
       const parsed = PacketEngine.parsePacket(packetBytes);
       if (parsed.valid) {
         handleIncomingPacket(parsed, {
@@ -1482,13 +1067,22 @@
         });
       }
 
-      // 4. Clear sender input box and voice recording after successful dispatch
+      // 2. High-speed acoustic burst transmission (~400ms)
+      if (AppState.audioModem) {
+        AppState.audioModem.transmitPacket(packetBytes).catch(() => {});
+      }
+
+      // 3. Clear sender form automatically
       if (isSenderView) {
         if (msgInput) msgInput.value = '';
         const charCounter = document.getElementById('senderCharCounter');
         if (charCounter) charCounter.textContent = '0 / 17 Bytes';
         discardVoiceRecording();
       }
+
+      AppState.stats.txCount++;
+      const txCountEl = document.getElementById('statTxCount');
+      if (txCountEl) txCountEl.textContent = AppState.stats.txCount;
 
     } catch (err) {
       alert(`Transmission Notice: ${err.message}`);
@@ -1501,28 +1095,24 @@
 
   function initApp() {
     initRoleFromHash();
-    initMaps();
-    initVisualizers();
     initVoiceRecorder();
     initReceiverVoicePlayer();
     initGpsTracking();
     initCrossTabSync();
 
-    // Start Live Clock
     setInterval(updateClock, 1000);
     updateClock();
 
-    // Instantiate Audio Modem Engine
     AppState.audioModem = new AudioModem({ mode: 'ultrasonic' });
 
     AppState.audioModem.onTxStart = () => {
       ['senderBroadcastBtnText', 'meshBroadcastBtnText'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.textContent = 'TRANSMITTING ACOUSTIC BFSK...';
+        if (el) el.textContent = 'TRANSMITTING ACOUSTIC SOS...';
       });
     };
 
-    AppState.audioModem.onTxProgress = ({ currentBit, totalBits, progressPercent }) => {
+    AppState.audioModem.onTxProgress = ({ progressPercent }) => {
       ['senderTxProgressOverlay', 'meshTxProgressOverlay'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.width = `${progressPercent}%`;
@@ -1538,65 +1128,12 @@
         const el = document.getElementById(id);
         if (el) el.style.width = '0%';
       });
-      AppState.stats.txCount++;
-      const txCountEl = document.getElementById('statTxCount');
-      if (txCountEl) txCountEl.textContent = AppState.stats.txCount;
-    };
-
-    AppState.audioModem.onRxStateChange = (state) => {
-      ['receiverRxStateBadge', 'meshRxStateBadge'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-          el.textContent = state;
-          el.className = state === 'LISTENING' ? 'px-2 py-0.5 rounded text-xs font-mono font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'px-2 py-0.5 rounded text-xs font-mono font-bold uppercase bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse';
-        }
-      });
-    };
-
-    AppState.audioModem.onRxProgress = ({ currentBit, totalBits, bitValue, progressPercent }) => {
-      ['receiverRxBitCounter', 'meshRxBitCounter'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = `${currentBit} / ${totalBits} BITS`;
-      });
-      const pBar = document.getElementById('receiverRxProgressBar');
-      if (pBar) pBar.style.width = `${progressPercent}%`;
-
-      const viewer = document.getElementById('receiverBitStreamViewer');
-      if (viewer) {
-        const bitClass = bitValue === 1 ? 'text-emerald-400 font-bold' : 'text-slate-400';
-        viewer.innerHTML += `<span class="${bitClass}">${bitValue}</span>`;
-        if (currentBit % 8 === 0) viewer.innerHTML += ' ';
-        viewer.scrollTop = viewer.scrollHeight;
-      }
     };
 
     AppState.audioModem.onPacketReceived = (packet) => {
       handleIncomingPacket(packet, null);
     };
 
-    AppState.audioModem.onAudioLevels = ({ snr, noiseFloor, peakFreq }) => {
-      const snrStr = `${snr.toFixed(1)} dB`;
-      const floorStr = `${noiseFloor.toFixed(1)} dB`;
-      const freqStr = `${Math.round(peakFreq).toLocaleString()} Hz`;
-
-      const rSnr = document.getElementById('receiverHudSnr');
-      const rFloor = document.getElementById('receiverHudNoiseFloor');
-      const rFreq = document.getElementById('receiverHudPeakFreq');
-
-      if (rSnr) rSnr.textContent = snrStr;
-      if (rFloor) rFloor.textContent = floorStr;
-      if (rFreq) rFreq.textContent = freqStr;
-
-      const mSnr = document.getElementById('meshHudSnr');
-      const mFloor = document.getElementById('meshHudNoiseFloor');
-      const mFreq = document.getElementById('meshHudPeakFreq');
-
-      if (mSnr) mSnr.textContent = snrStr;
-      if (mFloor) mFloor.textContent = floorStr;
-      if (mFreq) mFreq.textContent = freqStr;
-    };
-
-    // Auto-start listener on first click
     const startAudioOnce = async () => {
       try {
         await AppState.audioModem.startListening();
@@ -1637,7 +1174,6 @@
   /* -------------------------------------------------------------------------- */
 
   function setupUIEventListeners() {
-    // 1. Role Navigation Buttons
     const navSender = document.getElementById('navBtnSender');
     const navReceiver = document.getElementById('navBtnReceiver');
     const navMesh = document.getElementById('navBtnMesh');
@@ -1646,7 +1182,6 @@
     if (navReceiver) navReceiver.addEventListener('click', () => setRole('receiver'));
     if (navMesh) navMesh.addEventListener('click', () => setRole('mesh'));
 
-    // 2. Audio Power Toggle
     const btnAudio = document.getElementById('btnToggleAudio');
     if (btnAudio) {
       btnAudio.addEventListener('click', async () => {
@@ -1664,7 +1199,6 @@
       });
     }
 
-    // 3. Frequency Mode Selectors
     const btnUltra = document.getElementById('btnModeUltrasonic');
     const btnAudible = document.getElementById('btnModeAudible');
 
@@ -1682,19 +1216,18 @@
       });
     }
 
-    // 4. 6 Disaster Type Buttons
     document.querySelectorAll('.distress-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const typeId = parseInt(btn.dataset.distress, 10);
         AppState.activeDistressType = typeId;
 
         document.querySelectorAll('.distress-btn').forEach(b => {
-          b.className = 'distress-btn p-3 rounded-xl border text-left transition-all flex flex-col gap-1.5 bg-tactical-850 border-tactical-border text-slate-400 hover:border-slate-600';
+          b.className = 'distress-btn p-3.5 rounded-xl border text-left transition-all flex flex-col gap-1.5 bg-tactical-850 border-tactical-border text-slate-400 hover:border-slate-600';
         });
 
         const meta = PacketEngine.DISTRESS_TYPES[typeId];
         document.querySelectorAll(`[data-distress="${typeId}"]`).forEach(b => {
-          b.className = `distress-btn active p-3 rounded-xl border text-left transition-all flex flex-col gap-1.5 ${meta.bgClass} shadow-md`;
+          b.className = `distress-btn active p-3.5 rounded-xl border text-left transition-all flex flex-col gap-1.5 ${meta.bgClass} shadow-md`;
         });
 
         const sPri = document.getElementById('senderDistressPriority');
@@ -1705,18 +1238,20 @@
       });
     });
 
-    // 5. GPS Triggers
     const btnSenderGps = document.getElementById('btnSenderGps');
     if (btnSenderGps) btnSenderGps.addEventListener('click', acquireHighAccuracyGps);
 
-    // 6. Presets
     document.querySelectorAll('.btn-preset-loc').forEach(btn => {
       btn.addEventListener('click', () => {
         const lat = parseFloat(btn.dataset.lat);
         const lon = parseFloat(btn.dataset.lon);
         AppState.currentLat = lat;
         AppState.currentLon = lon;
-        updateCoordinatesUI(lat, lon, 5.0);
+
+        const sLat = document.getElementById('senderInputLat');
+        const sLon = document.getElementById('senderInputLon');
+        if (sLat) sLat.value = lat.toFixed(6);
+        if (sLon) sLon.value = lon.toFixed(6);
       });
     });
 
@@ -1731,7 +1266,6 @@
       });
     });
 
-    // Message Input Char Counter
     const senderMsgInput = document.getElementById('senderInputMessage');
     if (senderMsgInput) {
       senderMsgInput.addEventListener('input', () => {
@@ -1741,17 +1275,13 @@
       });
     }
 
-    // 7. Master Broadcast Buttons
     const btnSenderBroadcast = document.getElementById('btnSenderBroadcastSos');
     const btnMeshBroadcast = document.getElementById('btnMeshBroadcastSos');
 
     if (btnSenderBroadcast) btnSenderBroadcast.addEventListener('click', () => handleBroadcastSos('sender'));
     if (btnMeshBroadcast) btnMeshBroadcast.addEventListener('click', () => handleBroadcastSos('mesh'));
 
-    // 8. Simulator Multi-Sender Test Bench
     const btnSim = document.getElementById('btnSimulatePacket');
-    const btnLoop = document.getElementById('btnLoopbackTest');
-
     if (btnSim) {
       btnSim.addEventListener('click', () => {
         const randomSenders = [
@@ -1778,28 +1308,17 @@
       });
     }
 
-    if (btnLoop) {
-      btnLoop.addEventListener('click', () => handleBroadcastSos('mesh'));
-    }
-
-    // 9. Clear All Feeds
     const btnRxClear = document.getElementById('btnReceiverClearFeed');
     const btnMeshClear = document.getElementById('btnMeshClearFeed');
 
     const clearAllFeeds = () => {
       AppState.receivedPackets = [];
-      AppState.distressMarkers.forEach(marker => {
-        if (AppState.receiverMap && AppState.receiverMap.hasLayer(marker)) AppState.receiverMap.removeLayer(marker);
-        if (AppState.meshMap && AppState.meshMap.hasLayer(marker)) AppState.meshMap.removeLayer(marker);
-      });
-      AppState.distressMarkers.clear();
       renderEmergencyFeeds();
     };
 
     if (btnRxClear) btnRxClear.addEventListener('click', clearAllFeeds);
     if (btnMeshClear) btnMeshClear.addEventListener('click', clearAllFeeds);
 
-    // 10. Dismiss ACK Banner
     const btnDismissAck = document.getElementById('btnDismissAck');
     if (btnDismissAck) {
       btnDismissAck.addEventListener('click', () => {
@@ -1807,17 +1326,6 @@
         if (banner) banner.classList.add('hidden');
       });
     }
-
-    // 11. Modals
-    const hexModal = document.getElementById('hexModal');
-    const btnCloseHex = document.getElementById('btnCloseHexModal');
-    if (btnCloseHex) btnCloseHex.addEventListener('click', () => hexModal.close());
-
-    const helpModal = document.getElementById('helpModal');
-    const btnOpenHelp = document.getElementById('btnOpenHelpModal');
-    const btnCloseHelp = document.getElementById('btnCloseHelpModal');
-    if (btnOpenHelp) btnOpenHelp.addEventListener('click', () => helpModal.showModal());
-    if (btnCloseHelp) btnCloseHelp.addEventListener('click', () => helpModal.close());
   }
 
   document.addEventListener('DOMContentLoaded', initApp);

@@ -8,7 +8,7 @@ Built for 24-Hour Open Innovation Hackathons, **SilentBridge** converts standard
 
 ## ⚡ Key Highlights
 
-- 🔇 **Near-Ultrasonic Acoustic Carrier**: Operates at 18.0–19.5 kHz (inaudible to most adults) with a one-click Audible Demo Mode (1.5–2.2 kHz) for presentations.
+- ⚡ **Instant SOS Delivery**: SOS alerts, voice memos, and exact GPS coordinates are delivered to the receiver **within seconds**.
 - 🚨 **6 Standard Disaster Classifications**:
   1. 🏥 **Medical Emergency**
   2. 🏢 **Trapped / Structural Collapse**
@@ -17,9 +17,11 @@ Built for 24-Hour Open Innovation Hackathons, **SilentBridge** converts standard
   5. 🌋 **Earthquake / Landslide**
   6. ⛺ **Food / Water / Shelter Needed**
 - 🎙️ **Emergency Voice Memo Recording with Re-Record**: Survivors can record up to 10-second voice memos with live audio waveforms, preview audio, and re-record before sending.
-- 🗺️ **Sender-Side Interactive Map & High-Accuracy GPS**: Embedded Leaflet map with a draggable pin for exact building/room pinpointing alongside GPS accuracy confidence readouts (`±X.Xm`).
-- 🔄 **Bidirectional Rescue Acknowledgment (ACK)**: When the Rescue Base receives a distress beacon, they can dispatch an acoustic/mesh ACK confirmation back to the survivor.
-- 👥 **Multiple Concurrent Senders**: Real-time triage feed tracking multiple survivors simultaneously with individual voice dispatches and distance estimates.
+- 📱 **Streamlined Survivor / Sender UI (No Map)**: Clean, rapid disaster interface with auto-detected GPS coordinates, timestamped message box, and one-tap SOS broadcast.
+- 🗺️ **One-Click Google Maps Navigation (Receiver)**: Direct **"Open in Google Maps"** links (`https://www.google.com/maps?q=lat,lon`) on every incoming beacon for instant route dispatch.
+- 🔊 **Simplified Rescue Receiver UI**: Clean dashboard displaying incoming messages, live audio voice players with +6dB field gain booster, and one-tap ACK response.
+- 🔄 **Bidirectional Rescue Acknowledgment (ACK)**: When the Rescue Base receives a distress beacon, they can dispatch an ACK confirmation back to the survivor.
+- 👥 **Multiple Concurrent Senders**: Real-time triage feed tracking multiple survivors simultaneously.
 - 🧹 **Auto-Clearing Form**: Message text and recorded audio automatically reset on the sender's interface once successfully transmitted.
 - 🚀 **Zero Build Step / 100% Self-Contained**: Pure vanilla modern JavaScript, HTML5, and CSS. Runs immediately in any modern browser.
 
@@ -29,10 +31,10 @@ Built for 24-Hour Open Innovation Hackathons, **SilentBridge** converts standard
 
 ```
 silentbridge/
-├── index.html          # Clean role switcher, 6 disaster grid, Sender map, Voice recorder/player
+├── index.html          # Clean role switcher, 6 disaster grid, Voice recorder, Google Maps links
 ├── crc16.js            # Standalone CCITT CRC-16 integrity checker (polynomial 0x1021)
 ├── packetEngine.js     # 32-byte binary protocol encoder, decoder, bit-packer & ACK creator
-├── audioModem.js       # Dual-engine Web Audio API pipeline: BFSK Transmitter & FFT Demodulator
+├── audioModem.js       # Dual-engine Web Audio API pipeline: BFSK Transmitter & Demodulator
 └── app.js              # State manager, GPS tracker, Voice engine, ACK coordinator & Mesh router
 ```
 
@@ -70,15 +72,15 @@ Open **[http://localhost:8080](http://localhost:8080)** in Chrome, Edge, Safari,
 1. In **Tab 1 (Sender)**:
    - Select one of the **6 Disaster Classifications** (e.g. *Medical* or *Flood*).
    - Click **"Record Voice (10s)"**, speak an emergency message, and test the **"Re-Record"** or **"Play Preview"** buttons.
-   - Drag the red map pin to your exact building on the map or click **"Get GPS Fix"**.
    - Click **"BROADCAST ACOUSTIC SOS & VOICE"**.
-   - Notice that the message box and voice recording cleanly auto-clear for the next alert.
+   - The form immediately auto-clears.
 2. In **Tab 2 (Receiver)**:
-   - The distress beacon is plotted on the geo-tactical radar map with exact coordinates and distance.
+   - Within seconds, the emergency card appears with the disaster badge, message, timestamp, and coordinates.
+   - Click **"Open in Google Maps ↗"** to open the survivor's exact location in Google Maps.
    - Click **"Play Voice SOS"** to listen to the survivor's audio memo with the live waveform visualizer.
    - Click **"🚨 Send ACK"** to dispatch rescue confirmation.
 3. In **Tab 1 (Sender)**:
-   - A bright green confirmation banner appears: **"✅ Base Station Acknowledged Distress Beacon! Help is En Route."** with a confirmation chime.
+   - A bright green confirmation banner appears: **"✅ Base Station Confirmed Distress Beacon! Rescue is En Route."** with a confirmation chime.
 
 ---
 
