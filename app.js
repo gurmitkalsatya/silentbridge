@@ -4,6 +4,7 @@
  *  - Instant SOS Broadcasting (received by receiver in < 1-2 seconds).
  *  - 6 Disaster Classifications (Medical, Trapped, Fire, Flood, Earthquake, Supplies).
  *  - Streamlined Sender Interface (Auto GPS coordinates, timestamped message, voice memo with Re-Record).
+ *  - Live Beacon & Rescue ACK Confirmation Tracking (Sender receives real-time confirmation that base received message).
  *  - Auto-Clearing Sender Form on transmit.
  *  - Simplified Clean Receiver Interface (Disaster cards, Voice SOS player, Direct Google Maps links, Send ACK).
  *  - 100% Offline Acoustic Modulation & Multi-Tab Synchronization.
@@ -885,6 +886,9 @@
   }
 
   function handleIncomingAck(targetMessageId) {
+    console.log(`[SilentBridge] ACK received for Beacon #${targetMessageId}`);
+
+    // 1. Show Top Banner
     const banner = document.getElementById('senderAckBanner');
     const timeEl = document.getElementById('ackTimestamp');
     const msgEl = document.getElementById('ackMessageText');
@@ -892,7 +896,31 @@
     if (banner) {
       banner.classList.remove('hidden');
       if (timeEl) timeEl.textContent = new Date().toTimeString().split(' ')[0];
-      if (msgEl) msgEl.textContent = `Base Station Confirmed Distress Beacon #${targetMessageId}! Rescue is En Route.`;
+      if (msgEl) msgEl.textContent = `Base Station Confirmed Distress Beacon #${targetMessageId}! Rescue Team is En Route.`;
+    }
+
+    // 2. Update Sender Live Tracking Card
+    const statusText = document.getElementById('senderTrackingStatusText');
+    const statusBadge = document.getElementById('senderTrackingBadge');
+    const trackingDot = document.getElementById('senderTrackingDot');
+    const meshBadge = document.getElementById('meshSenderTrackingBadge');
+
+    if (statusText) {
+      statusText.innerHTML = `<span class="text-emerald-400 font-extrabold">CONFIRMED // Beacon #${targetMessageId} received by Base Station! Help is en route.</span>`;
+    }
+    if (statusBadge) {
+      statusBadge.textContent = 'ACK RECEIVED ✓';
+      statusBadge.className = 'text-[10px] px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 font-mono font-extrabold shadow-md';
+    }
+    if (trackingDot) {
+      trackingDot.innerHTML = `
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+      `;
+    }
+    if (meshBadge) {
+      meshBadge.textContent = 'ACK CONFIRMED ✓';
+      meshBadge.className = 'text-[10px] px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-bold';
     }
 
     AppState.stats.ackCount++;
@@ -1042,6 +1070,30 @@
     const msg = msgInput ? msgInput.value : 'NEED RESCUE ASAP';
     const messageId = PacketEngine.generateMessageId();
     AppState.lastSentMessageId = messageId;
+
+    // Update Sender Tracking Card to "Awaiting Base Station ACK..."
+    const statusText = document.getElementById('senderTrackingStatusText');
+    const statusBadge = document.getElementById('senderTrackingBadge');
+    const trackingDot = document.getElementById('senderTrackingDot');
+    const meshBadge = document.getElementById('meshSenderTrackingBadge');
+
+    if (statusText) {
+      statusText.innerHTML = `Beacon #${messageId} Broadcasted (<span class="text-amber-400">Awaiting Base Station ACK...</span>)`;
+    }
+    if (statusBadge) {
+      statusBadge.textContent = 'AWAITING ACK...';
+      statusBadge.className = 'text-[10px] px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono font-bold animate-pulse';
+    }
+    if (trackingDot) {
+      trackingDot.innerHTML = `
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+      `;
+    }
+    if (meshBadge) {
+      meshBadge.textContent = 'AWAITING ACK...';
+      meshBadge.className = 'text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold animate-pulse';
+    }
 
     const packetBytes = PacketEngine.createPacket({
       messageId: messageId,
