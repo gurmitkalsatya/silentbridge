@@ -513,9 +513,15 @@
             <i data-lucide="radio-tower" class="w-5 h-5 text-red-400"></i>
             <h3 class="font-bold text-white text-sm font-mono uppercase tracking-wider">Incoming Distress Beacons</h3>
           </div>
-          <button id="btnReceiverClearFeed" class="text-xs text-slate-500 hover:text-slate-300 font-mono">
-            Clear All
-          </button>
+          <div class="flex items-center gap-2">
+            <button id="btnTestSiren" class="text-xs px-2.5 py-1 rounded-lg bg-red-950 hover:bg-red-900 text-red-300 border border-red-500/40 font-mono font-bold flex items-center gap-1 shadow-sm">
+              <i data-lucide="bell-ring" class="w-3.5 h-3.5"></i>
+              <span>🚨 Test Siren</span>
+            </button>
+            <button id="btnReceiverClearFeed" class="text-xs text-slate-500 hover:text-slate-300 font-mono">
+              Clear All
+            </button>
+          </div>
         </div>
 
         <!-- Scrollable Feed Container -->

@@ -974,38 +974,62 @@
   }
 
   /* -------------------------------------------------------------------------- */
-  /*             EMERGENCY ALARM BUZZER SIREN (RECEIVER SOUND)                  */
+  /*                AUTHENTIC RESCUE EMERGENCY SIREN (RECEIVER)                 */
   /* -------------------------------------------------------------------------- */
 
-  function playEmergencyBuzzer() {
+  function playEmergencySiren() {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
       const now = ctx.currentTime;
+      const totalCycles = 3;
+      const cycleDuration = 0.75; // 0.75s per wail cycle
+      const totalDuration = totalCycles * cycleDuration;
 
-      // 4 rapid emergency alarm horn pulses (960 Hz <-> 770 Hz)
-      for (let i = 0; i < 4; i++) {
-        const startTime = now + i * 0.28;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
+      // Master Gain
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(0.001, now);
+      masterGain.gain.linearRampToValueAtTime(0.45, now + 0.04);
+      masterGain.gain.setValueAtTime(0.45, now + totalDuration - 0.08);
+      masterGain.gain.linearRampToValueAtTime(0.001, now + totalDuration);
+      masterGain.connect(ctx.destination);
 
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(960, startTime);
-        osc.frequency.setValueAtTime(770, startTime + 0.14);
+      // Primary Siren Oscillator (Sawtooth for high-penetration emergency tone)
+      const osc1 = ctx.createOscillator();
+      osc1.type = 'sawtooth';
 
-        gain.gain.setValueAtTime(0.001, startTime);
-        gain.gain.linearRampToValueAtTime(0.35, startTime + 0.02);
-        gain.gain.linearRampToValueAtTime(0.35, startTime + 0.23);
-        gain.gain.linearRampToValueAtTime(0.001, startTime + 0.27);
+      // Secondary Oscillator (Triangle wave for resonant acoustic body)
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'triangle';
 
-        osc.connect(gain);
-        gain.connect(ctx.destination);
+      for (let i = 0; i < totalCycles; i++) {
+        const cycleStart = now + i * cycleDuration;
+        const midPoint = cycleStart + cycleDuration * 0.5;
+        const cycleEnd = cycleStart + cycleDuration;
 
-        osc.start(startTime);
-        osc.stop(startTime + 0.28);
+        // Undulating emergency pitch sweep: 620 Hz -> 1480 Hz -> 620 Hz
+        osc1.frequency.setValueAtTime(620, cycleStart);
+        osc1.frequency.exponentialRampToValueAtTime(1480, midPoint);
+        osc1.frequency.exponentialRampToValueAtTime(620, cycleEnd);
+
+        // Harmonic layer: 310 Hz -> 740 Hz -> 310 Hz
+        osc2.frequency.setValueAtTime(310, cycleStart);
+        osc2.frequency.exponentialRampToValueAtTime(740, midPoint);
+        osc2.frequency.exponentialRampToValueAtTime(310, cycleEnd);
       }
-    } catch (e) {}
+
+      osc1.connect(masterGain);
+      osc2.connect(masterGain);
+
+      osc1.start(now);
+      osc2.start(now);
+
+      osc1.stop(now + totalDuration + 0.05);
+      osc2.stop(now + totalDuration + 0.05);
+    } catch (e) {
+      console.warn('Siren audio notice:', e);
+    }
   }
 
   /* -------------------------------------------------------------------------- */
@@ -1040,8 +1064,8 @@
     renderEmergencyFeeds();
     setActiveVoiceDispatch(packet);
 
-    // 🚨 Play Loud Emergency Alarm Siren on Receiver
-    playEmergencyBuzzer();
+    // 🚨 Blow Authentic Emergency Rescue Siren on Receiver
+    playEmergencySiren();
   }
 
   /* -------------------------------------------------------------------------- */
@@ -1462,6 +1486,13 @@
           dataUrl: AppState.voice.dataUrl,
           duration: AppState.voice.durationSeconds || 3.0
         });
+      });
+    }
+
+    const btnTestSiren = document.getElementById('btnTestSiren');
+    if (btnTestSiren) {
+      btnTestSiren.addEventListener('click', () => {
+        playEmergencySiren();
       });
     }
 
