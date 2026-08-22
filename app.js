@@ -74,7 +74,7 @@
     if (elapsedSeconds < 60) return `${elapsedSeconds}s ago`;
     const elapsedMinutes = Math.floor(elapsedSeconds / 60);
     if (elapsedMinutes < 60) return `${elapsedMinutes}m ago`;
-    const elapsedHours = Math.floor(elapsedMinutes / 60);
+    const elapsedHours = Math.floor(elapsedSeconds / 60);
     return `${elapsedHours}h ago`;
   }
 
