@@ -1,12 +1,12 @@
 /**
  * SilentBridge - Main Application Controller
  * Features:
- *  - Instant SOS Broadcasting (received by receiver in < 1-2 seconds).
+ *  - 1-Tap Instant Panic SOS Button (Single-tap emergency broadcasting).
+ *  - Emergency Alarm Siren / Buzzer on Receiver when disaster messages arrive.
+ *  - Dynamic Vivid Green Dashboard Transformation on Sender when ACK is received.
  *  - 6 Disaster Classifications (Medical, Trapped, Fire, Flood, Earthquake, Supplies).
- *  - Streamlined Sender Interface (Auto GPS coordinates, timestamped message, voice memo with Re-Record).
- *  - Live Beacon & Rescue ACK Confirmation Tracking (Sender receives real-time confirmation that base received message).
- *  - Auto-Clearing Sender Form on transmit.
- *  - Simplified Clean Receiver Interface (Disaster cards, Voice SOS player, Direct Google Maps links, Send ACK).
+ *  - Auto GPS coordinates, timestamped message, voice memo with Re-Record.
+ *  - Direct Google Maps routing links on Receiver.
  *  - 100% Offline Acoustic Modulation & Multi-Tab Synchronization.
  */
 
@@ -19,7 +19,7 @@
     audioModem: null,
 
     // Telemetry & Packets
-    receivedPackets: [],       // Array of parsed packet objects from multiple senders
+    receivedPackets: [],
     seenPacketIds: new Set(),
     activeDistressType: 1,     // 1 to 6
     currentLat: 37.774900,
@@ -812,7 +812,7 @@
                   <i data-lucide="play" class="w-4 h-4"></i> Play Voice SOS
                 </button>
                 <button type="button" class="btn-send-ack text-xs px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold transition-all flex items-center gap-1.5 shadow-md shadow-emerald-950/40" data-msgid="${pkt.messageId}">
-                  <i data-lucide="check-check" class="w-4 h-4"></i> Send ACK
+                  <i data-lucide="check-check" class="w-4 h-4"></i> Dispatch Rescue & Send ACK
                 </button>
               </div>
 
@@ -849,7 +849,7 @@
       btn.addEventListener('click', async () => {
         const msgId = parseInt(btn.dataset.msgid, 10);
         await dispatchRescueAck(msgId);
-        btn.textContent = 'ACK Sent ✓';
+        btn.textContent = 'ACK Sent ✓ (Rescue En Route)';
         btn.className = 'text-xs px-3.5 py-2 rounded-xl bg-emerald-900 text-emerald-300 border border-emerald-500/40 font-mono font-bold';
       });
     });
@@ -909,18 +909,23 @@
       if (msgEl) msgEl.textContent = `Base Station Confirmed Distress Beacon #${targetMessageId}! Rescue Team is En Route.`;
     }
 
-    // 2. Update Sender Live Tracking Card
+    // 2. Turn Sender Dashboard into Vivid Glowing Green
+    const trackingCard = document.getElementById('senderLiveTrackingCard');
     const statusText = document.getElementById('senderTrackingStatusText');
     const statusBadge = document.getElementById('senderTrackingBadge');
     const trackingDot = document.getElementById('senderTrackingDot');
     const meshBadge = document.getElementById('meshSenderTrackingBadge');
 
+    if (trackingCard) {
+      trackingCard.className = 'p-4 rounded-2xl bg-emerald-950/90 border-2 border-emerald-400 shadow-2xl shadow-emerald-950/80 font-mono text-xs flex items-center justify-between gap-3 transition-all duration-500 mb-6';
+    }
+
     if (statusText) {
-      statusText.innerHTML = `<span class="text-emerald-400 font-extrabold">CONFIRMED // Beacon #${targetMessageId} received by Base Station! Help is en route.</span>`;
+      statusText.innerHTML = `<span class="text-emerald-300 font-extrabold text-sm flex items-center gap-1.5"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i> ✅ RESCUE ACK RECEIVED: Base Station Confirmed Beacon #${targetMessageId}! Rescue Team En Route.</span>`;
     }
     if (statusBadge) {
       statusBadge.textContent = 'ACK RECEIVED ✓';
-      statusBadge.className = 'text-[10px] px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 font-mono font-extrabold shadow-md';
+      statusBadge.className = 'text-[10px] px-3 py-1 rounded-lg bg-emerald-500 text-slate-950 font-mono font-extrabold shadow-lg shadow-emerald-950/50';
     }
     if (trackingDot) {
       trackingDot.innerHTML = `
@@ -938,6 +943,8 @@
     if (ackCountEl) ackCountEl.textContent = AppState.stats.ackCount;
 
     playAckSuccessChime();
+
+    if (window.lucide) window.lucide.createIcons();
   }
 
   function playAckSuccessChime() {
@@ -955,14 +962,49 @@
       osc.frequency.setValueAtTime(1046.50, ctx.currentTime + 0.3);
 
       gain.gain.setValueAtTime(0.001, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.05);
-      gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.05);
+      gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.55);
 
       osc.connect(gain);
       gain.connect(ctx.destination);
 
       osc.start();
-      osc.stop(ctx.currentTime + 0.55);
+      osc.stop(ctx.currentTime + 0.6);
+    } catch (e) {}
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /*             EMERGENCY ALARM BUZZER SIREN (RECEIVER SOUND)                  */
+  /* -------------------------------------------------------------------------- */
+
+  function playEmergencyBuzzer() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+
+      // 4 rapid emergency alarm horn pulses (960 Hz <-> 770 Hz)
+      for (let i = 0; i < 4; i++) {
+        const startTime = now + i * 0.28;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(960, startTime);
+        osc.frequency.setValueAtTime(770, startTime + 0.14);
+
+        gain.gain.setValueAtTime(0.001, startTime);
+        gain.gain.linearRampToValueAtTime(0.35, startTime + 0.02);
+        gain.gain.linearRampToValueAtTime(0.35, startTime + 0.23);
+        gain.gain.linearRampToValueAtTime(0.001, startTime + 0.27);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(startTime);
+        osc.stop(startTime + 0.28);
+      }
     } catch (e) {}
   }
 
@@ -998,31 +1040,8 @@
     renderEmergencyFeeds();
     setActiveVoiceDispatch(packet);
 
-    playReceptionChirp();
-  }
-
-  function playReceptionChirp() {
-    try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.15);
-
-      gain.gain.setValueAtTime(0.001, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.02);
-      gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.2);
-
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.start();
-      osc.stop(ctx.currentTime + 0.22);
-    } catch (e) {}
+    // 🚨 Play Loud Emergency Alarm Siren on Receiver
+    playEmergencyBuzzer();
   }
 
   /* -------------------------------------------------------------------------- */
@@ -1065,7 +1084,78 @@
   }
 
   /* -------------------------------------------------------------------------- */
-  /*                 INSTANT TRANSMIT SOS HANDLER & AUTO-CLEAR                  */
+  /*                 ⚡ 1-TAP INSTANT PANIC SOS HANDLER                         */
+  /* -------------------------------------------------------------------------- */
+
+  async function handleOneTapPanicSos() {
+    acquireHighAccuracyGps();
+
+    const messageId = PacketEngine.generateMessageId();
+    AppState.lastSentMessageId = messageId;
+
+    // Set Tracking Status to Awaiting ACK
+    const trackingCard = document.getElementById('senderLiveTrackingCard');
+    const statusText = document.getElementById('senderTrackingStatusText');
+    const statusBadge = document.getElementById('senderTrackingBadge');
+    const trackingDot = document.getElementById('senderTrackingDot');
+
+    if (trackingCard) {
+      trackingCard.className = 'bg-tactical-900/90 border border-amber-500/60 rounded-2xl p-4 shadow-xl font-mono text-xs flex items-center justify-between gap-3 mb-6';
+    }
+    if (statusText) {
+      statusText.innerHTML = `<span class="text-amber-300 font-extrabold">🚨 1-TAP PANIC BEACON #${messageId} BROADCASTED // Awaiting Base Station ACK...</span>`;
+    }
+    if (statusBadge) {
+      statusBadge.textContent = 'PANIC SOS SENT';
+      statusBadge.className = 'text-[10px] px-2.5 py-1 rounded-lg bg-red-600 text-white font-mono font-bold animate-pulse shadow-md';
+    }
+    if (trackingDot) {
+      trackingDot.innerHTML = `
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+      `;
+    }
+
+    const packetBytes = PacketEngine.createPacket({
+      messageId: messageId,
+      distressType: AppState.activeDistressType || 1,
+      latitude: AppState.currentLat,
+      longitude: AppState.currentLon,
+      message: 'PANIC SOS: NEED RESCUE',
+      ttl: 3
+    });
+
+    const voiceDataUrl = AppState.voice.dataUrl;
+    const voiceDuration = AppState.voice.durationSeconds;
+
+    try {
+      broadcastDistressCrossTab(packetBytes, voiceDataUrl, voiceDuration);
+
+      const parsed = PacketEngine.parsePacket(packetBytes);
+      if (parsed.valid) {
+        handleIncomingPacket(parsed, {
+          dataUrl: voiceDataUrl,
+          duration: voiceDuration
+        });
+      }
+
+      if (AppState.audioModem) {
+        AppState.audioModem.transmitPacket(packetBytes).catch(() => {});
+      }
+
+      discardVoiceRecording();
+
+      AppState.stats.txCount++;
+      const txCountEl = document.getElementById('statTxCount');
+      if (txCountEl) txCountEl.textContent = AppState.stats.txCount;
+
+    } catch (err) {
+      alert(`Panic Transmission Notice: ${err.message}`);
+    }
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /*                 REGULAR BROADCAST SOS HANDLER & AUTO-CLEAR                 */
   /* -------------------------------------------------------------------------- */
 
   async function handleBroadcastSos(source) {
@@ -1082,13 +1172,17 @@
     AppState.lastSentMessageId = messageId;
 
     // Update Sender Tracking Card to "Awaiting Base Station ACK..."
+    const trackingCard = document.getElementById('senderLiveTrackingCard');
     const statusText = document.getElementById('senderTrackingStatusText');
     const statusBadge = document.getElementById('senderTrackingBadge');
     const trackingDot = document.getElementById('senderTrackingDot');
     const meshBadge = document.getElementById('meshSenderTrackingBadge');
 
+    if (trackingCard) {
+      trackingCard.className = 'bg-tactical-900/90 border border-amber-500/50 rounded-2xl p-4 shadow-xl font-mono text-xs flex items-center justify-between gap-3 mb-6';
+    }
     if (statusText) {
-      statusText.innerHTML = `Beacon #${messageId} Broadcasted (<span class="text-amber-400">Awaiting Base Station ACK...</span>)`;
+      statusText.innerHTML = `Beacon #${messageId} Broadcasted (<span class="text-amber-400 font-bold">Awaiting Base Station ACK...</span>)`;
     }
     if (statusBadge) {
       statusBadge.textContent = 'AWAITING ACK...';
@@ -1118,7 +1212,6 @@
     const voiceDuration = AppState.voice.durationSeconds;
 
     try {
-      // 1. Instant Cross-tab and local dispatch (arrives within milliseconds)
       broadcastDistressCrossTab(packetBytes, voiceDataUrl, voiceDuration);
 
       const parsed = PacketEngine.parsePacket(packetBytes);
@@ -1129,12 +1222,10 @@
         });
       }
 
-      // 2. High-speed acoustic burst transmission (~400ms)
       if (AppState.audioModem) {
         AppState.audioModem.transmitPacket(packetBytes).catch(() => {});
       }
 
-      // 3. Clear sender form automatically
       if (isSenderView) {
         if (msgInput) msgInput.value = '';
         const charCounter = document.getElementById('senderCharCounter');
@@ -1336,6 +1427,10 @@
         if (counter) counter.textContent = `${len} / 17 Bytes`;
       });
     }
+
+    // ⚡ 1-Tap Panic SOS Button
+    const btnOneTap = document.getElementById('btnOneTapPanicSos');
+    if (btnOneTap) btnOneTap.addEventListener('click', handleOneTapPanicSos);
 
     const btnSenderBroadcast = document.getElementById('btnSenderBroadcastSos');
     const btnMeshBroadcast = document.getElementById('btnMeshBroadcastSos');

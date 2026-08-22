@@ -120,7 +120,7 @@
   <main class="flex-1 max-w-3xl w-full mx-auto p-3 sm:p-5 flex flex-col gap-5">
 
     <!-- Received ACK Alert Banner (Hidden until rescue team acknowledges) -->
-    <div id="senderAckBanner" class="hidden p-4 rounded-2xl bg-gradient-to-r from-emerald-950 via-tactical-900 to-emerald-950 border-2 border-emerald-500 shadow-2xl flex items-center justify-between gap-4 animate-pulse">
+    <div id="senderAckBanner" class="hidden p-4 rounded-2xl bg-gradient-to-r from-emerald-950 via-tactical-900 to-emerald-950 border-2 border-emerald-400 shadow-2xl flex items-center justify-between gap-4 animate-pulse">
       <div class="flex items-center gap-3">
         <div class="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
           <i data-lucide="check-check" class="w-6 h-6"></i>
@@ -143,26 +143,34 @@
       </button>
     </div>
 
-    <!-- Header Banner -->
-    <div class="bg-gradient-to-r from-red-950/80 via-tactical-900 to-tactical-900 border border-red-500/40 rounded-2xl p-5 shadow-2xl flex items-center justify-between gap-4">
-      <div class="flex items-center gap-3.5">
-        <div class="p-3 rounded-xl bg-red-500/20 text-red-400 border border-red-500/40 shadow-inner">
-          <i data-lucide="siren" class="w-7 h-7 animate-pulse"></i>
+    <!-- ⚡ HIGH-PRIORITY 1-TAP INSTANT PANIC SOS BUTTON -->
+    <div class="p-1">
+      <button type="button" id="btnOneTapPanicSos" class="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-500 hover:to-rose-500 active:scale-[0.98] transition-all shadow-2xl shadow-red-900/80 border-2 border-red-400 text-white font-mono font-extrabold text-base sm:text-lg tracking-wider uppercase flex items-center justify-center gap-3 group">
+        <div class="p-2 rounded-xl bg-white/20 text-white group-hover:scale-110 transition-transform">
+          <i data-lucide="zap" class="w-6 h-6 animate-bounce"></i>
         </div>
+        <div class="text-left">
+          <span class="block leading-none">⚡ 1-TAP INSTANT PANIC SOS</span>
+          <span class="text-[11px] font-normal text-red-100 normal-case block mt-0.5">Immediately broadcasts GPS location & critical alert to rescue teams in 1 tap</span>
+        </div>
+      </button>
+    </div>
+
+    <!-- Live Distress Beacon & ACK Tracking Status Card (Turns glowing green on ACK) -->
+    <div id="senderLiveTrackingCard" class="bg-tactical-900/90 border border-tactical-border rounded-2xl p-4 shadow-xl font-mono text-xs flex items-center justify-between gap-3 transition-all duration-500">
+      <div class="flex items-center gap-3">
+        <span id="senderTrackingDot" class="relative flex h-3 w-3">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-3 w-3 bg-slate-500"></span>
+        </span>
         <div>
-          <div class="flex items-center gap-2">
-            <span class="px-2 py-0.5 rounded bg-red-600 text-white font-mono text-[10px] font-extrabold uppercase">
-              EMERGENCY PORTAL
-            </span>
-            <span class="text-xs text-red-300 font-mono font-bold">NO INTERNET REQUIRED</span>
-          </div>
-          <h2 class="text-xl font-extrabold text-white tracking-wide uppercase mt-0.5">Civilian SOS Transmitter</h2>
+          <span class="text-[10px] text-slate-500 block font-bold">RESCUE ACK STATUS</span>
+          <span id="senderTrackingStatusText" class="text-slate-300 font-bold text-xs">STANDBY (Ready to broadcast SOS)</span>
         </div>
       </div>
-      <div class="text-right font-mono text-xs text-slate-400 hidden sm:block">
-        <span class="text-emerald-400 font-bold block">ACOUSTIC CARRIER READY</span>
-        <span id="senderClock">--:--:--</span>
-      </div>
+      <span id="senderTrackingBadge" class="text-[10px] px-2.5 py-1 rounded-lg bg-tactical-800 text-slate-400 border border-slate-700 font-bold">
+        IDLE
+      </span>
     </div>
 
     <!-- 1. 6 Disaster Options -->
@@ -335,29 +343,12 @@
     </div>
 
     <!-- Master Broadcast Button (Instant Delivery) -->
-    <div class="pt-1">
+    <div class="pt-1 mb-6">
       <button type="button" id="btnSenderBroadcastSos" class="relative w-full py-4 px-6 rounded-2xl font-mono font-extrabold text-base tracking-wider uppercase text-white bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-rose-600 active:scale-[0.99] transition-all shadow-2xl shadow-red-950/60 border border-red-500/60 flex items-center justify-center gap-3 overflow-hidden group">
         <i data-lucide="radio" class="w-6 h-6 group-hover:scale-110 transition-transform"></i>
         <span id="senderBroadcastBtnText">BROADCAST ACOUSTIC SOS & VOICE</span>
         <div id="senderTxProgressOverlay" class="absolute inset-0 bg-cyan-500/30 w-0 transition-all duration-75 pointer-events-none"></div>
       </button>
-    </div>
-
-    <!-- Live Distress Beacon & ACK Tracking Status Card -->
-    <div id="senderLiveTrackingCard" class="bg-tactical-900/90 border border-tactical-border rounded-2xl p-4 shadow-xl font-mono text-xs flex items-center justify-between gap-3 mb-6">
-      <div class="flex items-center gap-3">
-        <span id="senderTrackingDot" class="relative flex h-3 w-3">
-          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-400 opacity-75"></span>
-          <span class="relative inline-flex rounded-full h-3 w-3 bg-slate-500"></span>
-        </span>
-        <div>
-          <span class="text-[10px] text-slate-500 block font-bold">RESCUE ACK STATUS</span>
-          <span id="senderTrackingStatusText" class="text-slate-300 font-bold text-xs">STANDBY (Ready to broadcast SOS)</span>
-        </div>
-      </div>
-      <span id="senderTrackingBadge" class="text-[10px] px-2.5 py-1 rounded-lg bg-tactical-800 text-slate-400 border border-slate-700 font-bold">
-        IDLE
-      </span>
     </div>
 
     <!-- Footer with Discreet Authority Portal Link -->
