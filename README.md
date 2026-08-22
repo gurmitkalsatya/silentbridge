@@ -8,29 +8,25 @@ Built for 24-Hour Open Innovation Hackathons, **SilentBridge** converts standard
 
 ## ⚡ Key Highlights
 
+- 🔐 **Rescue Authority Authentication (Sign In & Sign Up with Password)**:
+  - Complete tabbed authentication system on `receiver.html`:
+    - **Sign In**: Officer Email/ID & Password.
+    - **Sign Up / Register**: Officer Name, Agency / Badge ID, Email, and Password.
+    - **1-Click Demo Login**: Pre-configured admin access (`commander@rescue.org` / `rescue911`).
+    - **Log Out**: Secure session exit button in the header.
+- 🚫 **Isolated Receiver Portal (`receiver.html`)**:
+  - Exclusively for rescue teams, paramedics, police, and disaster authorities with all civilian survivor controls removed.
+- 🌿 **Black & White Aesthetic with Nature Topographical Theme**:
+  - High-contrast monochromatic design (deep obsidian black `#07090E` & crisp white).
+  - Layered with organic vector **topographical contour elevation lines and mountain textures**.
 - ⚡ **1-Tap Instant Panic SOS Button (Sender)**:
-  - High-urgency, 1-tap single-button trigger at the top of the interface.
-  - Automatically acquires high-accuracy GPS coordinates and broadcasts a high-priority emergency beacon to rescue teams in 1 tap without requiring manual typing.
-- 🚨 **Emergency Buzzer & Alarm Siren (Receiver)**:
-  - When an incoming disaster message/beacon arrives at the receiver, a **loud dual-frequency emergency alarm buzzer** (960 Hz / 770 Hz siren pattern) sounds automatically to alert rescue personnel immediately.
+  - High-urgency, 1-tap single-button trigger on `sender.html` that automatically grabs current GPS coordinates and broadcasts a distress beacon in 1 tap without typing.
+- 🚨 **Realistic Emergency Rescue Siren (Receiver)**:
+  - Multi-sweep dual-oscillator acoustic siren (620 Hz up to 1480 Hz wails) that automatically sounds when a survivor distress beacon is detected.
 - 🟢 **Dynamic Glowing Green Dashboard on ACK (Sender)**:
-  - When the Rescue Base clicks **"Send ACK"**, an acknowledgment confirmation is modulated back to the survivor.
-  - The survivor's dashboard dynamically transforms into a **bright glowing emerald green state** (`ACK RECEIVED ✓ // RESCUE TEAM EN ROUTE`) with an ascending multi-tone confirmation chime.
+  - When Rescue Command clicks **"Dispatch Rescue & Send ACK"**, the survivor's dashboard turns **vivid glowing emerald green** (`ACK RECEIVED ✓ // RESCUE TEAM EN ROUTE`) with a confirmation chime.
 - 📱 **Dedicated Survivor Portal (`sender.html`)**:
-  - Accessible by multiple concurrent citizens/survivors on their mobile devices.
-  - Contains **only** sender functionality: 1-Tap panic button, 6 disaster options, auto GPS location, timestamped message, emergency voice memo (with live waveform, Play Preview, and Re-Record), and Broadcast SOS button.
-  - **No receiver triage controls or survivor feeds visible to civilians.**
-- 🛡️ **Dedicated Rescue Authority Portal (`receiver.html`)**:
-  - Restricted to rescue teams, first responders, disaster management authorities, police, and paramedics.
-  - Secured with an **Authority Access Gate (PIN: `911` / `RESCUE` or 1-click Authority Pass)**.
-  - Live multi-sender triage feed with exact coordinates, direct **"Open in Google Maps ↗"** buttons, emergency voice player (+6dB volume booster), and **"🚨 Dispatch Rescue & Send ACK"** controls.
-- 🚨 **6 Standard Disaster Classifications**:
-  1. 🏥 **Medical Emergency**
-  2. 🏢 **Trapped / Structural Collapse**
-  3. 🔥 **Fire / Chemical Hazard**
-  4. 🌊 **Flood / Water Rising**
-  5. 🌋 **Earthquake / Landslide**
-  6. ⛺ **Food / Water / Shelter Needed**
+  - Accessible by multiple concurrent citizens/survivors on their mobile devices (1-Tap SOS, 6 disaster classifications, GPS locator, voice memo with Re-Record, and live green ACK card).
 - 🧹 **Auto-Clearing Form**: Message text and recorded audio automatically reset on the sender's interface once successfully transmitted.
 - 🚀 **Zero Build Step / 100% Self-Contained**: Pure vanilla modern JavaScript, HTML5, and CSS. Runs immediately in any modern browser.
 
@@ -40,13 +36,13 @@ Built for 24-Hour Open Innovation Hackathons, **SilentBridge** converts standard
 
 ```
 silentbridge/
-├── sender.html         # Dedicated Survivor Portal (1-Tap Panic SOS, 6 Disasters, Voice Memo, Green ACK)
-├── receiver.html       # Dedicated Rescue Authority Dashboard (PIN protected, Emergency Buzzer, Triage Feed)
+├── sender.html         # Dedicated Survivor Portal (B&W Nature Theme, 1-Tap SOS, Voice Memo, Green ACK)
+├── receiver.html       # Isolated Rescue Portal (Sign In / Register with password, Siren, Triage Feed)
 ├── index.html          # Unified Portal with Split Demo View & role switcher
 ├── crc16.js            # Standalone CCITT CRC-16 integrity checker (polynomial 0x1021)
 ├── packetEngine.js     # 32-byte binary protocol encoder, decoder, bit-packer & ACK creator
 ├── audioModem.js       # Dual-engine Web Audio API pipeline: BFSK Transmitter & Demodulator
-└── app.js              # State manager, GPS tracker, Voice engine, Buzzer synthesizer & ACK coordinator
+└── app.js              # State manager, Auth engine, GPS tracker, Voice engine & Siren synthesizer
 ```
 
 ---
@@ -83,11 +79,12 @@ Open in Chrome, Edge, Safari, or Firefox.
 
 ### 3. Step-by-Step Emergency Demo Flow:
 
-1. **Sender 1-Tap SOS**: Open `sender.html` and click **"⚡ 1-TAP INSTANT PANIC SOS"**.
-2. **Receiver Alarm Buzzer**: On `receiver.html`, the emergency beacon arrives and a **loud alarm siren/buzzer** sounds immediately.
-3. **Google Maps Routing**: Rescuer clicks **"Open in Google Maps ↗"** or **"Play Voice SOS"**.
-4. **Dispatch ACK**: Rescuer clicks **"🚨 Dispatch Rescue & Send ACK"**.
-5. **Green Dashboard Confirmation**: On `sender.html`, the survivor's dashboard **turns vivid green** with **"✅ RESCUE ACK RECEIVED"** and an audio confirmation chime.
+1. **Rescue Sign In / Sign Up**: Open `receiver.html`, sign in with `commander@rescue.org` / `rescue911` (or click **"1-Click Demo Login"** or **"Sign Up"** to create a new account).
+2. **Survivor 1-Tap SOS**: Open `sender.html` and click **"⚡ 1-TAP INSTANT PANIC SOS"**.
+3. **Rescue Siren**: On `receiver.html`, the emergency beacon arrives and the **loud emergency rescue siren** wails automatically.
+4. **Google Maps Routing**: Rescuer clicks **"Open in Google Maps ↗"** or **"Play Voice SOS"**.
+5. **Dispatch ACK**: Rescuer clicks **"🚨 Dispatch Rescue & Send ACK"**.
+6. **Green Dashboard Confirmation**: On `sender.html`, the survivor's dashboard **turns vivid glowing green** with **"✅ RESCUE ACK RECEIVED"** and an audio confirmation chime.
 
 ---
 

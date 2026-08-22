@@ -165,6 +165,151 @@
   }
 
   /* -------------------------------------------------------------------------- */
+  /*            RESCUE AUTHORITY AUTHENTICATION (SIGN IN / SIGN UP)             */
+  /* -------------------------------------------------------------------------- */
+
+  const DEFAULT_OFFICERS = [
+    {
+      email: 'commander@rescue.org',
+      password: 'rescue911',
+      name: 'Commander Vance',
+      badge: 'National Disaster Relief // #NDR-01'
+    }
+  ];
+
+  function getSavedOfficers() {
+    try {
+      const data = localStorage.getItem('silentbridge_officers');
+      if (data) return JSON.parse(data);
+    } catch (e) {}
+    return DEFAULT_OFFICERS;
+  }
+
+  function saveOfficers(officers) {
+    try {
+      localStorage.setItem('silentbridge_officers', JSON.stringify(officers));
+    } catch (e) {}
+  }
+
+  function unlockRescueDashboard(officer) {
+    const lockGate = document.getElementById('authorityLockGate');
+    const dashboard = document.getElementById('authorityDashboard');
+    const subBar = document.getElementById('dashboardSubBar');
+    const profile = document.getElementById('officerHeaderProfile');
+    const badgeName = document.getElementById('officerBadgeName');
+    const deptLabel = document.getElementById('dashboardOfficerDept');
+
+    if (lockGate) lockGate.classList.add('hidden');
+    if (dashboard) dashboard.classList.remove('hidden');
+    if (subBar) subBar.classList.remove('hidden');
+    if (profile) profile.classList.remove('hidden');
+    if (badgeName) badgeName.textContent = officer.name || 'Officer';
+    if (deptLabel) deptLabel.textContent = (officer.badge || 'TACTICAL COMMAND').toUpperCase();
+
+    try {
+      sessionStorage.setItem('silentbridge_active_officer', JSON.stringify(officer));
+    } catch (e) {}
+
+    if (window.lucide) window.lucide.createIcons();
+  }
+
+  function lockRescueDashboard() {
+    const lockGate = document.getElementById('authorityLockGate');
+    const dashboard = document.getElementById('authorityDashboard');
+    const subBar = document.getElementById('dashboardSubBar');
+    const profile = document.getElementById('officerHeaderProfile');
+
+    if (lockGate) lockGate.classList.remove('hidden');
+    if (dashboard) dashboard.classList.add('hidden');
+    if (subBar) subBar.classList.add('hidden');
+    if (profile) profile.classList.add('hidden');
+
+    try {
+      sessionStorage.removeItem('silentbridge_active_officer');
+      localStorage.removeItem('silentbridge_remembered_officer');
+    } catch (e) {}
+
+    if (window.lucide) window.lucide.createIcons();
+  }
+
+  function initRescueAuth() {
+    try {
+      const active = sessionStorage.getItem('silentbridge_active_officer') || localStorage.getItem('silentbridge_remembered_officer');
+      if (active) {
+        unlockRescueDashboard(JSON.parse(active));
+      }
+    } catch (e) {}
+
+    const formSignIn = document.getElementById('formSignIn');
+    const formSignUp = document.getElementById('formSignUp');
+    const btnDemoPass = document.getElementById('btnQuickDemoPass');
+    const btnLogOut = document.getElementById('btnLogOut');
+
+    if (formSignIn) {
+      formSignIn.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const email = document.getElementById('signInEmail').value.trim().toLowerCase();
+        const password = document.getElementById('signInPassword').value;
+        const remember = document.getElementById('rememberMe')?.checked;
+
+        const officers = getSavedOfficers();
+        const matched = officers.find(o => o.email.toLowerCase() === email && o.password === password);
+
+        if (matched) {
+          if (remember) {
+            try { localStorage.setItem('silentbridge_remembered_officer', JSON.stringify(matched)); } catch (e) {}
+          }
+          unlockRescueDashboard(matched);
+        } else {
+          alert('Invalid Officer Email or Password.\n\nUse: commander@rescue.org / rescue911, or click "1-Click Demo Login".');
+        }
+      });
+    }
+
+    if (formSignUp) {
+      formSignUp.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const name = document.getElementById('signUpName').value.trim();
+        const badge = document.getElementById('signUpBadge').value.trim();
+        const email = document.getElementById('signUpEmail').value.trim().toLowerCase();
+        const password = document.getElementById('signUpPassword').value;
+        const confirmPassword = document.getElementById('signUpConfirmPassword').value;
+
+        if (password !== confirmPassword) {
+          alert('Passwords do not match. Please verify.');
+          return;
+        }
+
+        const officers = getSavedOfficers();
+        if (officers.some(o => o.email.toLowerCase() === email)) {
+          alert('An officer account with this email already exists. Please Sign In.');
+          return;
+        }
+
+        const newOfficer = { name, badge, email, password };
+        officers.push(newOfficer);
+        saveOfficers(officers);
+
+        alert(`Account created successfully for ${name}!\nLogging in now...`);
+        unlockRescueDashboard(newOfficer);
+      });
+    }
+
+    if (btnDemoPass) {
+      btnDemoPass.addEventListener('click', () => {
+        const demoOfficer = DEFAULT_OFFICERS[0];
+        unlockRescueDashboard(demoOfficer);
+      });
+    }
+
+    if (btnLogOut) {
+      btnLogOut.addEventListener('click', () => {
+        lockRescueDashboard();
+      });
+    }
+  }
+
+  /* -------------------------------------------------------------------------- */
   /*                       HIGH-ACCURACY GPS TRACKER                            */
   /* -------------------------------------------------------------------------- */
 
@@ -1272,6 +1417,7 @@
 
   function initApp() {
     initRoleFromHash();
+    initRescueAuth();
     initVoiceRecorder();
     initReceiverVoicePlayer();
     initGpsTracking();

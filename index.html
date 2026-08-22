@@ -47,8 +47,8 @@
 
   <style>
     body {
-      background-color: #050811;
-      color: #E2E8F0;
+      background-color: #07090E;
+      color: #F1F5F9;
       font-family: 'Inter', sans-serif;
       overflow-x: hidden;
     }
@@ -57,11 +57,13 @@
       font-family: 'JetBrains Mono', monospace;
     }
 
-    .bg-tactical-grid {
-      background-size: 32px 32px;
+    /* Nature Topographical Contour & Grid Background */
+    .bg-nature-topography {
+      background-color: #07090E;
       background-image: 
-        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.03) 0%, transparent 40%),
+        radial-gradient(circle at 85% 80%, rgba(16, 185, 129, 0.03) 0%, transparent 45%),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='0.75' stroke-opacity='0.04'%3E%3Cpath d='M0 80 Q100 40 200 80 T400 80 M0 140 Q100 180 200 140 T400 140 M0 200 Q100 160 200 200 T400 200 M0 260 Q100 300 200 260 T400 260 M0 320 Q100 280 200 320 T400 320'/%3E%3Cpath d='M80 0 Q40 100 80 200 T80 400 M140 0 Q180 100 140 200 T140 400 M200 0 Q160 100 200 200 T200 400 M260 0 Q300 100 260 200 T260 400 M320 0 Q280 100 320 200 T320 400'/%3E%3C/g%3E%3C/svg%3E");
     }
 
     ::-webkit-scrollbar {
@@ -69,18 +71,15 @@
       height: 6px;
     }
     ::-webkit-scrollbar-track {
-      background: #0A101D;
+      background: #0E131F;
     }
     ::-webkit-scrollbar-thumb {
-      background: #1E2D4A;
+      background: #26314D;
       border-radius: 3px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: #06B6D4;
     }
   </style>
 </head>
-<body class="min-h-screen bg-tactical-950 bg-tactical-grid flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
+<body class="min-h-screen bg-nature-topography flex flex-col selection:bg-white/20 selection:text-white">
 
   <!-- Top Tactical Header / HUD -->
   <header class="sticky top-0 z-40 bg-tactical-900/95 backdrop-blur-md border-b border-tactical-border/80 px-4 py-3 shadow-lg shadow-black/50">

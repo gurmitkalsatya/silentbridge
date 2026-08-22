@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SilentBridge — Rescue Authority Emergency Command Portal</title>
+  <title>SilentBridge — Rescue Authority Command Portal</title>
   <meta name="description" content="Secure rescue team command dashboard for monitoring incoming survivor distress beacons, voice dispatches, Google Maps routing, and ACK confirmations.">
 
   <!-- Tailwind CSS CDN -->
@@ -15,14 +15,14 @@
         extend: {
           colors: {
             tactical: {
-              950: '#050811',
-              900: '#0A101D',
-              850: '#0F172A',
-              800: '#162238',
-              700: '#1E2D4A',
-              600: '#2A3F68',
-              border: '#1E2D4A',
-              accent: '#06B6D4',
+              950: '#07090E',
+              900: '#0E131F',
+              850: '#141A29',
+              800: '#1B2337',
+              700: '#26314D',
+              600: '#38476D',
+              border: '#222B42',
+              accent: '#38BDF8',
               danger: '#EF4444',
               warning: '#F59E0B',
               success: '#10B981'
@@ -47,8 +47,8 @@
 
   <style>
     body {
-      background-color: #050811;
-      color: #E2E8F0;
+      background-color: #07090E;
+      color: #F1F5F9;
       font-family: 'Inter', sans-serif;
       overflow-x: hidden;
     }
@@ -57,52 +57,54 @@
       font-family: 'JetBrains Mono', monospace;
     }
 
-    .bg-tactical-grid {
-      background-size: 32px 32px;
+    /* Nature Topographical Contour & Grid Background */
+    .bg-nature-topography {
+      background-color: #07090E;
       background-image: 
-        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        radial-gradient(circle at 15% 20%, rgba(56, 189, 248, 0.04) 0%, transparent 40%),
+        radial-gradient(circle at 85% 80%, rgba(16, 185, 129, 0.03) 0%, transparent 45%),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='0.75' stroke-opacity='0.04'%3E%3Cpath d='M0 80 Q100 40 200 80 T400 80 M0 140 Q100 180 200 140 T400 140 M0 200 Q100 160 200 200 T400 200 M0 260 Q100 300 200 260 T400 260 M0 320 Q100 280 200 320 T400 320'/%3E%3Cpath d='M80 0 Q40 100 80 200 T80 400 M140 0 Q180 100 140 200 T140 400 M200 0 Q160 100 200 200 T200 400 M260 0 Q300 100 260 200 T260 400 M320 0 Q280 100 320 200 T320 400'/%3E%3C/g%3E%3C/svg%3E");
     }
 
     ::-webkit-scrollbar {
       width: 6px;
     }
     ::-webkit-scrollbar-track {
-      background: #0A101D;
+      background: #0E131F;
     }
     ::-webkit-scrollbar-thumb {
-      background: #1E2D4A;
+      background: #26314D;
       border-radius: 3px;
     }
   </style>
 </head>
-<body class="min-h-screen bg-tactical-950 bg-tactical-grid flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
+<body class="min-h-screen bg-nature-topography flex flex-col selection:bg-white/20 selection:text-white">
 
   <!-- Top Tactical Rescue Header -->
-  <header class="sticky top-0 z-40 bg-tactical-900/95 backdrop-blur-md border-b border-tactical-border/80 px-4 py-3 shadow-lg shadow-black/50">
+  <header class="sticky top-0 z-40 bg-tactical-900/90 backdrop-blur-md border-b border-tactical-border px-4 py-3 shadow-xl">
     <div class="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-4">
       
-      <!-- Brand -->
+      <!-- Brand & Status -->
       <div class="flex items-center gap-3">
-        <div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-950/90 border border-cyan-500/40 text-cyan-400 shadow-inner">
-          <i data-lucide="shield" class="w-5 h-5"></i>
-          <span class="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-tactical-950"></span>
+        <div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-slate-900 border border-slate-700 text-white shadow-inner">
+          <i data-lucide="shield" class="w-5 h-5 text-white"></i>
+          <span class="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-tactical-950"></span>
         </div>
         <div>
           <div class="flex items-center gap-2">
             <h1 class="text-base sm:text-lg font-extrabold tracking-wider text-white uppercase flex items-center gap-2">
               SilentBridge
-              <span class="text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-mono font-bold">RESCUE HQ</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-white/10 text-white border border-white/20 font-mono font-bold">RESCUE HQ</span>
             </h1>
           </div>
           <p class="text-[11px] text-slate-400 flex items-center gap-1.5 font-mono">
-            <span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
             AUTHORITY EMERGENCY TRIAGE & DISPATCH COMMAND
           </p>
         </div>
       </div>
 
-      <!-- Header Controls -->
+      <!-- Controls: Listener & Auth Status -->
       <div class="flex items-center gap-3 font-mono text-xs">
         <button id="btnToggleAudio" class="px-3 py-1.5 rounded-lg font-mono text-xs font-bold transition-all flex items-center gap-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 shadow-sm">
           <span class="relative flex h-2 w-2">
@@ -112,23 +114,29 @@
           <span id="audioPowerText">LISTENER: ON</span>
         </button>
 
-        <a href="sender.html" class="px-3 py-1.5 rounded-lg bg-tactical-850 hover:bg-tactical-800 text-slate-400 hover:text-white border border-tactical-border font-bold flex items-center gap-1.5 transition-colors">
-          <i data-lucide="radio" class="w-3.5 h-3.5 text-red-400"></i>
-          <span>Survivor Portal</span>
-        </a>
+        <!-- Officer Profile & Logout (Visible when logged in) -->
+        <div id="officerHeaderProfile" class="hidden flex items-center gap-2">
+          <span id="officerBadgeName" class="text-slate-300 font-bold px-2.5 py-1 bg-tactical-850 rounded-lg border border-tactical-border">
+            Commander #01
+          </span>
+          <button type="button" id="btnLogOut" class="px-2.5 py-1 rounded-lg bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-500/40 flex items-center gap-1 font-bold transition-all" title="Sign Out">
+            <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+            <span>Log Out</span>
+          </button>
+        </div>
       </div>
 
     </div>
 
-    <!-- Status Sub-Bar -->
-    <div class="max-w-5xl mx-auto mt-2 pt-2 border-t border-tactical-border/40 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono text-slate-400">
+    <!-- Status Sub-Bar (Active once logged in) -->
+    <div id="dashboardSubBar" class="hidden max-w-5xl mx-auto mt-2 pt-2 border-t border-tactical-border/60 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono text-slate-400">
       <div class="flex items-center gap-2">
         <span class="text-slate-500">RECEIVED SOS:</span>
         <span id="statRxCount" class="text-emerald-400 font-bold">0</span>
       </div>
       <div class="flex items-center gap-2">
         <span class="text-slate-500">ACK DISPATCHED:</span>
-        <span id="statAckCount" class="text-cyan-400 font-bold">0</span>
+        <span id="statAckCount" class="text-white font-bold">0</span>
       </div>
       <div class="flex items-center gap-2">
         <span class="text-slate-500">ACTIVE FREQ:</span>
@@ -136,7 +144,7 @@
       </div>
       <div class="flex items-center gap-2">
         <span class="text-slate-500">HQ TIME:</span>
-        <span id="statClock" class="text-slate-200 font-bold">--:--:--</span>
+        <span id="statClock" class="text-white font-bold">--:--:--</span>
       </div>
     </div>
   </header>
@@ -144,46 +152,109 @@
   <!-- Main Container -->
   <main class="flex-1 max-w-5xl w-full mx-auto p-3 sm:p-5 flex flex-col gap-5">
 
-    <!-- Authority Authentication Gate (if locked) -->
-    <div id="authorityLockGate" class="hidden p-8 rounded-3xl bg-gradient-to-b from-tactical-900 to-tactical-950 border border-cyan-500/40 shadow-2xl text-center max-w-md mx-auto my-12 flex flex-col items-center gap-4">
-      <div class="p-4 rounded-2xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shadow-inner">
-        <i data-lucide="lock" class="w-8 h-8"></i>
-      </div>
-      <div>
-        <h2 class="text-lg font-extrabold text-white uppercase tracking-wider font-mono">Rescue Authority Access</h2>
-        <p class="text-xs text-slate-400 font-mono mt-1">This portal is restricted to authorized rescue personnel, disaster relief teams, and emergency responders.</p>
+    <!-- 1. FULL AUTHENTICATION MODAL (SIGN IN / SIGN UP) -->
+    <div id="authorityLockGate" class="p-6 sm:p-8 rounded-3xl bg-tactical-900/95 border border-tactical-border shadow-2xl max-w-md mx-auto my-8 w-full backdrop-blur-xl">
+      
+      <!-- Security Icon Header -->
+      <div class="text-center mb-6">
+        <div class="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 text-white flex items-center justify-center mx-auto mb-3 shadow-inner">
+          <i data-lucide="lock" class="w-7 h-7"></i>
+        </div>
+        <h2 class="text-xl font-extrabold text-white uppercase tracking-wider font-mono">Rescue Authority Portal</h2>
+        <p class="text-xs text-slate-400 font-mono mt-1">Authorized personnel only. Please sign in or register.</p>
       </div>
 
-      <div class="w-full space-y-3 font-mono text-xs">
-        <input type="password" id="authPinInput" placeholder="ENTER ACCESS PIN (e.g. 911)" class="w-full bg-tactical-950 border border-tactical-border rounded-xl px-4 py-3 text-center text-white font-bold tracking-widest focus:border-cyan-500 focus:outline-none uppercase">
-        <div class="flex items-center gap-2">
-          <button type="button" id="btnUnlockAuthority" class="flex-1 py-3 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold transition-all shadow-lg shadow-cyan-950/50">
-            AUTHENTICATE
-          </button>
-          <button type="button" id="btnQuickBypass" class="py-3 px-4 rounded-xl bg-tactical-800 hover:bg-tactical-700 text-cyan-300 border border-tactical-border font-bold">
-            1-Click Pass
-          </button>
-        </div>
+      <!-- Auth Tabs: Sign In vs Sign Up -->
+      <div class="flex bg-tactical-950 rounded-xl p-1 border border-tactical-border mb-5 text-xs font-mono">
+        <button type="button" id="tabBtnSignIn" class="flex-1 py-2 rounded-lg font-bold transition-all bg-white text-slate-950 shadow-md">
+          Sign In
+        </button>
+        <button type="button" id="tabBtnSignUp" class="flex-1 py-2 rounded-lg font-bold transition-all text-slate-400 hover:text-white">
+          Sign Up / Register
+        </button>
       </div>
+
+      <!-- FORM 1: SIGN IN -->
+      <form id="formSignIn" class="space-y-4 font-mono text-xs">
+        <div>
+          <label class="block text-slate-300 font-bold mb-1">OFFICER ID OR EMAIL</label>
+          <input type="text" id="signInEmail" placeholder="e.g. commander@rescue.org" value="commander@rescue.org" class="w-full bg-tactical-950 border border-tactical-border rounded-xl px-4 py-3 text-white focus:border-white focus:outline-none transition-colors shadow-inner" required>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-bold mb-1">PASSWORD</label>
+          <input type="password" id="signInPassword" placeholder="Enter password" value="rescue911" class="w-full bg-tactical-950 border border-tactical-border rounded-xl px-4 py-3 text-white focus:border-white focus:outline-none transition-colors shadow-inner" required>
+        </div>
+
+        <div class="flex items-center justify-between text-[11px] text-slate-400">
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" id="rememberMe" checked class="rounded border-slate-700 bg-tactical-950 text-white focus:ring-0">
+            <span>Remember credentials</span>
+          </label>
+          <span class="text-emerald-400">Offline Verified ✓</span>
+        </div>
+
+        <button type="submit" class="w-full py-3.5 px-4 rounded-xl bg-white hover:bg-slate-200 text-slate-950 font-extrabold text-sm tracking-wide uppercase transition-all shadow-lg shadow-white/10 active:scale-[0.99]">
+          SIGN IN TO COMMAND
+        </button>
+
+        <button type="button" id="btnQuickDemoPass" class="w-full py-2.5 px-4 rounded-xl bg-tactical-800 hover:bg-tactical-700 text-slate-300 border border-tactical-border font-bold text-xs flex items-center justify-center gap-1.5">
+          <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-400"></i>
+          <span>1-Click Demo Login</span>
+        </button>
+      </form>
+
+      <!-- FORM 2: SIGN UP / REGISTER -->
+      <form id="formSignUp" class="hidden space-y-4 font-mono text-xs">
+        <div>
+          <label class="block text-slate-300 font-bold mb-1">OFFICER FULL NAME</label>
+          <input type="text" id="signUpName" placeholder="e.g. Captain Marcus Vance" class="w-full bg-tactical-950 border border-tactical-border rounded-xl px-4 py-3 text-white focus:border-white focus:outline-none transition-colors shadow-inner" required>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-bold mb-1">RESCUE AGENCY / BADGE ID</label>
+          <input type="text" id="signUpBadge" placeholder="e.g. National Disaster Relief // #NDR-404" class="w-full bg-tactical-950 border border-tactical-border rounded-xl px-4 py-3 text-white focus:border-white focus:outline-none transition-colors shadow-inner" required>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-bold mb-1">OFFICER EMAIL</label>
+          <input type="email" id="signUpEmail" placeholder="e.g. officer@rescue.org" class="w-full bg-tactical-950 border border-tactical-border rounded-xl px-4 py-3 text-white focus:border-white focus:outline-none transition-colors shadow-inner" required>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-bold mb-1">CREATE PASSWORD</label>
+          <input type="password" id="signUpPassword" placeholder="Create strong password" class="w-full bg-tactical-950 border border-tactical-border rounded-xl px-4 py-3 text-white focus:border-white focus:outline-none transition-colors shadow-inner" required>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-bold mb-1">CONFIRM PASSWORD</label>
+          <input type="password" id="signUpConfirmPassword" placeholder="Repeat password" class="w-full bg-tactical-950 border border-tactical-border rounded-xl px-4 py-3 text-white focus:border-white focus:outline-none transition-colors shadow-inner" required>
+        </div>
+
+        <button type="submit" class="w-full py-3.5 px-4 rounded-xl bg-white hover:bg-slate-200 text-slate-950 font-extrabold text-sm tracking-wide uppercase transition-all shadow-lg shadow-white/10 active:scale-[0.99]">
+          REGISTER RESCUE ACCOUNT
+        </button>
+      </form>
+
     </div>
 
-    <!-- Authenticated Rescue Dashboard -->
-    <div id="authorityDashboard" class="flex flex-col gap-5">
+    <!-- 2. AUTHENTICATED RESCUE DASHBOARD (Hidden until signed in) -->
+    <div id="authorityDashboard" class="hidden flex flex-col gap-5">
       
       <!-- Top Rescue HQ Banner -->
-      <div class="bg-gradient-to-r from-cyan-950/90 via-tactical-900 to-tactical-900 border border-cyan-500/40 rounded-2xl p-5 shadow-2xl flex flex-wrap items-center justify-between gap-4">
+      <div class="bg-gradient-to-r from-tactical-900 via-tactical-850 to-tactical-900 border border-tactical-border rounded-2xl p-5 shadow-2xl flex flex-wrap items-center justify-between gap-4">
         <div class="flex items-center gap-3.5">
-          <div class="p-3 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shadow-inner">
+          <div class="p-3 rounded-xl bg-white/10 text-white border border-white/20 shadow-inner">
             <i data-lucide="shield" class="w-7 h-7"></i>
           </div>
           <div>
             <div class="flex items-center gap-2">
-              <span class="px-2 py-0.5 rounded bg-cyan-500 text-slate-950 font-mono text-[10px] font-extrabold uppercase">
+              <span class="px-2 py-0.5 rounded bg-white text-slate-950 font-mono text-[10px] font-extrabold uppercase">
                 RESCUE COMMAND
               </span>
-              <span class="text-xs text-cyan-300 font-mono font-bold">MULTI-SURVIVOR TRIAGE</span>
+              <span class="text-xs text-slate-300 font-mono font-bold" id="dashboardOfficerDept">TACTICAL UNIT</span>
             </div>
-            <h2 class="text-xl font-extrabold text-white tracking-wide uppercase mt-0.5">Emergency Message & Audio Dispatch</h2>
+            <h2 class="text-xl font-extrabold text-white tracking-wide uppercase mt-0.5">Emergency Triage & Voice Dispatch</h2>
           </div>
         </div>
 
@@ -194,16 +265,16 @@
       </div>
 
       <!-- Emergency Voice Dispatch Player -->
-      <div id="receiverVoiceDispatchConsole" class="bg-tactical-900/90 border border-rose-500/40 rounded-2xl p-4 sm:p-5 shadow-xl backdrop-blur-sm flex flex-col gap-3">
+      <div id="receiverVoiceDispatchConsole" class="bg-tactical-900/90 border border-tactical-border rounded-2xl p-4 sm:p-5 shadow-xl backdrop-blur-sm flex flex-col gap-3">
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-tactical-border/60 pb-3">
           <div class="flex items-center gap-2.5">
-            <div class="p-2 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/40">
+            <div class="p-2 rounded-lg bg-white/10 text-white border border-white/20">
               <i data-lucide="volume-2" class="w-5 h-5"></i>
             </div>
             <div>
               <h3 class="font-extrabold text-white text-sm font-mono uppercase tracking-wide flex items-center gap-2">
                 <span>Emergency Voice Player</span>
-                <span id="activeVoiceBadge" class="text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                <span id="activeVoiceBadge" class="text-[10px] px-2 py-0.5 rounded bg-white/10 text-slate-300 border border-white/20">
                   AWAITING VOICE
                 </span>
               </h3>
@@ -216,7 +287,7 @@
               <i data-lucide="zap" class="w-3 h-3 text-amber-400"></i>
               <span id="voiceBoostLabel">Boost: 1x</span>
             </button>
-            <button id="btnPlayActiveVoice" disabled class="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 disabled:opacity-40 hover:from-rose-500 hover:to-red-500 text-white font-bold flex items-center gap-2 shadow-md">
+            <button id="btnPlayActiveVoice" disabled class="px-4 py-2 rounded-xl bg-white hover:bg-slate-200 text-slate-950 font-extrabold flex items-center gap-2 shadow-md">
               <i data-lucide="play" class="w-4 h-4" id="receiverPlayIcon"></i>
               <span id="receiverPlayText">PLAY VOICE SOS</span>
             </button>
@@ -228,7 +299,7 @@
           <div id="receiverPlaybackPlaceholder" class="absolute inset-0 flex items-center justify-center text-slate-500 font-mono text-xs">
             <span>Audio waveform visualizer</span>
           </div>
-          <div id="playbackProgressBar" class="absolute left-0 top-0 bottom-0 bg-rose-500/20 border-r-2 border-rose-400 w-0 pointer-events-none transition-all duration-75"></div>
+          <div id="playbackProgressBar" class="absolute left-0 top-0 bottom-0 bg-white/20 border-r-2 border-white w-0 pointer-events-none transition-all duration-75"></div>
         </div>
 
         <div class="flex items-center justify-between text-xs font-mono text-slate-400 px-1">
@@ -249,7 +320,7 @@
               <i data-lucide="bell-ring" class="w-3.5 h-3.5"></i>
               <span>🚨 Test Siren</span>
             </button>
-            <button id="btnSimulatePacket" class="text-xs px-2.5 py-1 rounded bg-tactical-800 hover:bg-tactical-700 text-cyan-300 font-mono">
+            <button id="btnSimulatePacket" class="text-xs px-2.5 py-1 rounded bg-tactical-800 hover:bg-tactical-700 text-slate-300 font-mono">
               + Simulate Survivor
             </button>
             <button id="btnReceiverClearFeed" class="text-xs text-slate-500 hover:text-slate-300 font-mono">
@@ -273,37 +344,27 @@
   <script src="app.js"></script>
 
   <script>
-    // Simple Authority Gate Logic
+    // Tab switching & auth event bindings
     document.addEventListener('DOMContentLoaded', () => {
-      const lockGate = document.getElementById('authorityLockGate');
-      const dashboard = document.getElementById('authorityDashboard');
-      const pinInput = document.getElementById('authPinInput');
-      const btnUnlock = document.getElementById('btnUnlockAuthority');
-      const btnBypass = document.getElementById('btnQuickBypass');
+      const tabSignIn = document.getElementById('tabBtnSignIn');
+      const tabSignUp = document.getElementById('tabBtnSignUp');
+      const formSignIn = document.getElementById('formSignIn');
+      const formSignUp = document.getElementById('formSignUp');
 
-      function unlock() {
-        if (lockGate) lockGate.classList.add('hidden');
-        if (dashboard) dashboard.classList.remove('hidden');
-        sessionStorage.setItem('silentbridge_auth', 'true');
-      }
-
-      if (sessionStorage.getItem('silentbridge_auth') === 'true') {
-        unlock();
-      }
-
-      if (btnUnlock) {
-        btnUnlock.addEventListener('click', () => {
-          const val = pinInput ? pinInput.value.trim() : '';
-          if (val === '911' || val.toUpperCase() === 'RESCUE' || val === '112' || val === '0000' || val === '') {
-            unlock();
-          } else {
-            alert('Invalid PIN. Use 911 or click "1-Click Pass" for authorized demo access.');
-          }
+      if (tabSignIn && tabSignUp && formSignIn && formSignUp) {
+        tabSignIn.addEventListener('click', () => {
+          tabSignIn.className = 'flex-1 py-2 rounded-lg font-bold transition-all bg-white text-slate-950 shadow-md';
+          tabSignUp.className = 'flex-1 py-2 rounded-lg font-bold transition-all text-slate-400 hover:text-white';
+          formSignIn.classList.remove('hidden');
+          formSignUp.classList.add('hidden');
         });
-      }
 
-      if (btnBypass) {
-        btnBypass.addEventListener('click', unlock);
+        tabSignUp.addEventListener('click', () => {
+          tabSignUp.className = 'flex-1 py-2 rounded-lg font-bold transition-all bg-white text-slate-950 shadow-md';
+          tabSignIn.className = 'flex-1 py-2 rounded-lg font-bold transition-all text-slate-400 hover:text-white';
+          formSignUp.classList.remove('hidden');
+          formSignIn.classList.add('hidden');
+        });
       }
 
       if (window.lucide) {
