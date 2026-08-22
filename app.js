@@ -1243,6 +1243,17 @@
         }));
       } catch (e) {}
 
+      // Multi-Device Cloud Mesh ACK Broadcast
+      if (AppState.cloudWs && AppState.cloudWs.readyState === WebSocket.OPEN) {
+        try {
+          AppState.cloudWs.send(JSON.stringify({
+            type: 'ACK_BROADCAST',
+            targetMessageId: targetMessageId,
+            timestamp: Date.now()
+          }));
+        } catch (e) {}
+      }
+
       AppState.stats.ackCount++;
       const ackCountEl = document.getElementById('statAckCount');
       if (ackCountEl) ackCountEl.textContent = AppState.stats.ackCount;
@@ -1446,6 +1457,16 @@
     setActiveVoiceDispatch(packet);
     persistDistressPackets();
 
+    // Alert on Lock Screen if authority portal is currently locked
+    const lockAlert = document.getElementById('lockGateIncomingSosAlert');
+    const lockMsg = document.getElementById('lockGateSosMessage');
+    if (lockAlert) {
+      lockAlert.classList.remove('hidden');
+      if (lockMsg) {
+        lockMsg.textContent = `🚨 BEACON #${packet.messageId} RECEIVED: "${packet.message}" [${packet.latitude.toFixed(4)}, ${packet.longitude.toFixed(4)}]`;
+      }
+    }
+
     // 🚨 Sound Siren for verified emergency beacons (Mute siren for auto-flagged false alarms)
     if (!packet.isFalseAlarm) {
       playEmergencySiren();
@@ -1484,18 +1505,22 @@
       if (raw) {
         const list = JSON.parse(raw);
         if (Array.isArray(list) && list.length > 0) {
+          let hasNew = false;
           list.forEach(p => {
             if (!AppState.seenPacketIds.has(p.messageId)) {
               AppState.seenPacketIds.add(p.messageId);
               AppState.receivedPackets.push(p);
+              hasNew = true;
             }
           });
-          AppState.stats.rxCount = AppState.receivedPackets.length;
-          const rxCountEl = document.getElementById('statRxCount');
-          if (rxCountEl) rxCountEl.textContent = AppState.stats.rxCount;
-          renderEmergencyFeeds();
-          if (AppState.receivedPackets.length > 0) {
-            setActiveVoiceDispatch(AppState.receivedPackets[0]);
+          if (hasNew || AppState.stats.rxCount === 0) {
+            AppState.stats.rxCount = AppState.receivedPackets.length;
+            const rxCountEl = document.getElementById('statRxCount');
+            if (rxCountEl) rxCountEl.textContent = AppState.stats.rxCount;
+            renderEmergencyFeeds();
+            if (AppState.receivedPackets.length > 0) {
+              setActiveVoiceDispatch(AppState.receivedPackets[0]);
+            }
           }
         }
       }
@@ -1503,10 +1528,11 @@
   }
 
   /* -------------------------------------------------------------------------- */
-  /*            CROSS-TAB BROADCASTCHANNEL & STORAGE SYNCHRONIZATION            */
+  /*            HYBRID SYNC: BROADCASTCHANNEL + STORAGE + CLOUD MESH            */
   /* -------------------------------------------------------------------------- */
 
   function initCrossTabSync() {
+    // 1. Local BroadcastChannel
     try {
       if ('BroadcastChannel' in window) {
         AppState.syncChannel = new BroadcastChannel('silentbridge_instant_sync');
@@ -1516,7 +1542,7 @@
       }
     } catch (e) {}
 
-    // Bulletproof Window Storage Event Listener (Ensures delivery across all tabs/windows)
+    // 2. Window Storage Event (Cross-Tab / Cross-Window Sync)
     window.addEventListener('storage', (event) => {
       try {
         if (event.key === 'silentbridge_last_distress_event' && event.newValue) {
@@ -1531,7 +1557,42 @@
       } catch (e) {}
     });
 
+    // 3. Global Real-Time Cloud Mesh WebSocket Relay (Works Across Devices/Networks)
+    initCloudMeshRelay();
+
+    // 4. Initial Load & Periodic Background Sync Poll
     loadPersistedDistressPackets();
+    setInterval(loadPersistedDistressPackets, 1500);
+  }
+
+  function initCloudMeshRelay() {
+    try {
+      const wsUrl = 'wss://free.blr2.piesocket.com/v3/silentbridge_emergency_channel?api_key=VC3oYvqCLquHGBNHgOfoJJxDhqh0YQBqqxvngrY6&notify_self=0';
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        console.log('[SilentBridge] 🌐 Real-Time Cloud Mesh Connected ✓');
+        AppState.cloudWs = ws;
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          processSyncEvent(data);
+        } catch (e) {}
+      };
+
+      ws.onclose = () => {
+        AppState.cloudWs = null;
+        setTimeout(initCloudMeshRelay, 4000);
+      };
+
+      ws.onerror = () => {
+        AppState.cloudWs = null;
+      };
+    } catch (e) {
+      console.warn('Cloud Mesh notice:', e);
+    }
   }
 
   function processSyncEvent(data) {
@@ -1563,16 +1624,24 @@
       eventId: Math.random().toString(36).substring(2)
     };
 
+    // 1. Post to local BroadcastChannel
     if (AppState.syncChannel) {
       try {
         AppState.syncChannel.postMessage(payload);
       } catch (e) {}
     }
 
-    // Storage Event Dispatch for Instant Cross-Tab Notification
+    // 2. Post to LocalStorage Event
     try {
       localStorage.setItem('silentbridge_last_distress_event', JSON.stringify(payload));
     } catch (e) {}
+
+    // 3. Post to Global Cloud Mesh WebSocket (Multi-Device Delivery)
+    if (AppState.cloudWs && AppState.cloudWs.readyState === WebSocket.OPEN) {
+      try {
+        AppState.cloudWs.send(JSON.stringify(payload));
+      } catch (e) {}
+    }
   }
 
   /* -------------------------------------------------------------------------- */

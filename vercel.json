@@ -2,6 +2,11 @@
   "version": 2,
   "cleanUrls": true,
   "trailingSlash": false,
+  "rewrites": [
+    { "source": "/sender", "destination": "/sender.html" },
+    { "source": "/receiver", "destination": "/receiver.html" },
+    { "source": "/rescuer", "destination": "/receiver.html" }
+  ],
   "headers": [
     {
       "source": "/service-worker.js",

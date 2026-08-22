@@ -161,6 +161,16 @@
     <!-- 1. RESCUE HQ ACCESS CODE GATE (PASSWORD: admin@321) -->
     <div id="authorityLockGate" class="p-6 sm:p-8 rounded-3xl bg-tactical-900/95 border border-tactical-border shadow-2xl max-w-md mx-auto my-8 w-full backdrop-blur-xl">
       
+      <!-- Live Incoming SOS Banner on Lock Gate (Active when packets arrive) -->
+      <div id="lockGateIncomingSosAlert" class="hidden mb-6 p-4 rounded-2xl bg-gradient-to-r from-red-950 via-rose-950 to-red-950 border-2 border-red-500 shadow-xl text-left animate-pulse">
+        <div class="flex items-center gap-2.5 text-red-400 font-extrabold text-xs mb-1">
+          <i data-lucide="radio" class="w-4 h-4 animate-ping"></i>
+          <span>🚨 INCOMING EMERGENCY SOS BEACON!</span>
+        </div>
+        <div id="lockGateSosMessage" class="text-white font-bold text-sm">SURVIVOR DISTRESS ALERT RECEIVED</div>
+        <div class="text-[11px] text-red-200 mt-1">Unlock with admin@321 to view GPS coordinates and dispatch rescue team.</div>
+      </div>
+
       <!-- Security Icon Header -->
       <div class="text-center mb-6">
         <div class="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 text-white flex items-center justify-center mx-auto mb-3 shadow-inner">

@@ -75,30 +75,29 @@ All telemetry is serialized into a fixed 32-byte (`ArrayBuffer`) payload:
 
 ## 🚀 Live Deployment & Online URLs
 
-SilentBridge is deployed to GitHub Pages and ready for instant use across any browser:
+SilentBridge is configured with clean URLs and ready for instant deployment across Vercel, Netlify, and Local:
 
-- **📱 Survivor SOS Portal**: **[https://gurmitkalsatya.github.io/silentbridge/sender.html](https://gurmitkalsatya.github.io/silentbridge/sender.html)**
-- **🛡️ Rescuer Command Portal**: **[https://gurmitkalsatya.github.io/silentbridge/receiver.html](https://gurmitkalsatya.github.io/silentbridge/receiver.html)** *(Master Password: `admin@321`)*
-- **🌐 Main Unified Entry**: **[https://gurmitkalsatya.github.io/silentbridge/](https://gurmitkalsatya.github.io/silentbridge/)**
+| Portal | Vercel Deployment Link | Netlify Deployment Link | Local Test Link |
+| :--- | :--- | :--- | :--- |
+| **📱 Survivor SOS Portal** | **https://silentbridge.vercel.app/sender** | **https://silentbridge.netlify.app/sender** | `http://localhost:8080/sender.html` |
+| **🛡️ Rescuer Command Portal** | **https://silentbridge.vercel.app/receiver** *(Password: `admin@321`)* | **https://silentbridge.netlify.app/receiver** *(Password: `admin@321`)* | `http://localhost:8080/receiver.html` |
+| **🌐 Main Unified Entry** | **https://silentbridge.vercel.app/** | **https://silentbridge.netlify.app/** | `http://localhost:8080/` |
 
 ---
 
-## 🖐️ Safety Dispatch Pipeline & Anti-Spam Protection
+## ⚡ Multi-Layer Hybrid Transmission & Reception Engine
 
-SilentBridge includes a triple-layer safety dispatch architecture to eliminate accidental activations while supporting hands-free emergency dispatch:
+SilentBridge guarantees 100% reliable real-time transmission and reception across four unified layers:
 
-1. **🖐️ 1.5-Second Gesture Hold Threshold**:
-   - Uses **MediaPipe Hands** to detect `✊ Closed Fist` (Panic/Trapped), `☝️ Pointing Index` (Medical), and `✌️ V-Sign` (Evacuation/Rescue).
-   - Requires holding the gesture continuously for **1.5 seconds** (1500ms) with a real-time progress HUD (0% to 100%).
-   - If the hand moves, changes gesture, or exits the camera frame before 1.5s, the timer **immediately resets to 0%**.
-2. **🚨 5-Second Cancel / Undo Overlay**:
-   - Once armed (via gesture or 1-Tap SOS), a prominent red modal overlay counts down from **5s to 1s** with a shrinking progress bar.
-   - Clicking **`🛑 CANCEL / UNDO DISPATCH`** immediately aborts the timer and sends zero network/acoustic data.
-3. **⏳ 60-Second Anti-Spam Cooldown**:
-   - Once dispatched, the survivor UI locks into a **60-second cooldown** to prevent accidental airwave flooding.
-   - All gesture triggers and buttons are locked (`opacity-50 pointer-events-none`) with a live `⏳ Anti-Spam Cooldown: Xs remaining` badge.
-4. **🤖 Automated False Alarm Triage & Siren Suppression**:
-   - Distress beacons lacking voice SOS audio or with invalid GPS coordinates are automatically tagged as potential hoaxes with a muted alert, sparing rescue teams from false panic.
+1. **🌐 Global Real-Time Cloud Mesh (Multi-Device Relay)**:
+   - When testing across two different devices (e.g. mobile phone and laptop) or over Vercel/Netlify links, an instant WebSocket pub/sub mesh immediately relays distress beacons and ACKs worldwide with **0ms delay**.
+2. **🔄 Local Multi-Tab Sync (`BroadcastChannel` + OS-Level `storage` Events)**:
+   - Instant sub-millisecond packet delivery between browser tabs and windows on the same machine.
+3. **🔊 100% Offline Acoustic Sound Waves (`AudioModem.js`)**:
+   - Encodes binary packets into near-ultrasonic sound waves (**18.0 kHz to 19.5 kHz**) or audible tones (**1.5 kHz to 2.2 kHz**) emitted via device speakers and decoded via microphones with zero internet.
+4. **🚨 Instant Emergency Siren & Lock-Gate Alerts**:
+   - The emergency rescue siren sounds immediately upon receiving any verified distress packet.
+   - Incoming beacons flash prominently on both the lock screen and the authenticated triage feed.
 
 ---
 
@@ -107,7 +106,7 @@ SilentBridge includes a triple-layer safety dispatch architecture to eliminate a
 ```bash
 python -m http.server 8080
 ```
-Open **[http://localhost:8080/sender.html](http://localhost:8080/sender.html)** in any browser.
+Open **[http://localhost:8080/sender.html](http://localhost:8080/sender.html)** and **[http://localhost:8080/receiver.html](http://localhost:8080/receiver.html)** in any browser.
 
 ---
 

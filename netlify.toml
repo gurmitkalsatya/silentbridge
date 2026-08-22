@@ -1,3 +1,18 @@
+[[redirects]]
+  from = "/sender"
+  to = "/sender.html"
+  status = 200
+
+[[redirects]]
+  from = "/receiver"
+  to = "/receiver.html"
+  status = 200
+
+[[redirects]]
+  from = "/rescuer"
+  to = "/receiver.html"
+  status = 200
+
 [[headers]]
   for = "/service-worker.js"
   [headers.values]
