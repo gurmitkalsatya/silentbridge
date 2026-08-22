@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SilentBridge — Acoustic P2P Mesh Emergency Communicator</title>
+  <meta name="description" content="Zero-infrastructure, offline emergency peer-to-peer acoustic mesh communicator transmitting SOS telemetry via near-ultrasonic sound waves.">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            tactical: {
+              950: '#060911',
+              900: '#0B111E',
+              850: '#101827',
+              800: '#162238',
+              700: '#223454',
+              600: '#334D7A',
+              border: '#1E2D4A',
+              accent: '#06B6D4',
+              danger: '#EF4444',
+              warning: '#F59E0B',
+              success: '#10B981'
+            }
+          },
+          fontFamily: {
+            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif']
+          },
+          animation: {
+            'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'radar-ping': 'radarPing 2s cubic-bezier(0, 0, 0.2, 1) infinite',
+            'glow-cyan': 'glowCyan 2s ease-in-out infinite alternate',
+            'glow-red': 'glowRed 1.5s ease-in-out infinite alternate'
+          },
+          keyframes: {
+            radarPing: {
+              '75%, 100%': { transform: 'scale(2.5)', opacity: '0' }
+            },
+            glowCyan: {
+              '0%': { boxShadow: '0 0 10px rgba(6, 182, 212, 0.2)' },
+              '100%': { boxShadow: '0 0 25px rgba(6, 182, 212, 0.6)' }
+            },
+            glowRed: {
+              '0%': { boxShadow: '0 0 10px rgba(239, 68, 68, 0.3)' },
+              '100%': { boxShadow: '0 0 30px rgba(239, 68, 68, 0.8)' }
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Leaflet.js CSS & JS CDN -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <style>
+    /* Custom tactical styling */
+    body {
+      background-color: #060911;
+      color: #E2E8F0;
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+    }
+
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Custom subtle grid background */
+    .bg-tactical-grid {
+      background-size: 32px 32px;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    }
+
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0B111E;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1E2D4A;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #06B6D4;
+    }
+
+    /* Leaflet Dark Theme Overrides */
+    .leaflet-container {
+      background: #0B111E !important;
+      font-family: 'Inter', sans-serif;
+    }
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+      background: #0B111E !important;
+      color: #E2E8F0 !important;
+      border: 1px solid #1E2D4A;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.8) !important;
+    }
+    .leaflet-control-zoom a {
+      background: #101827 !important;
+      color: #06B6D4 !important;
+      border-color: #1E2D4A !important;
+    }
+
+    /* Radar Wave Effect */
+    .radar-pulse-beacon {
+      position: relative;
+    }
+    .radar-pulse-beacon::after {
+      content: '';
+      position: absolute;
+      top: -6px;
+      left: -6px;
+      right: -6px;
+      bottom: -6px;
+      border-radius: 50%;
+      border: 2px solid currentColor;
+      animation: radarPing 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-tactical-950 bg-tactical-grid flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
+
+  <!-- Top Tactical Header / Command HUD -->
+  <header class="sticky top-0 z-40 bg-tactical-900/90 backdrop-blur-md border-b border-tactical-border/80 px-4 py-3 shadow-lg shadow-black/40">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      
+      <!-- Brand & Status -->
+      <div class="flex items-center gap-3">
+        <div class="relative flex items-center justify-center w-10 h-10 rounded-lg bg-cyan-950/80 border border-cyan-500/40 text-cyan-400 shadow-inner">
+          <i data-lucide="radio" class="w-5 h-5 animate-pulse"></i>
+          <span class="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-tactical-950"></span>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-extrabold tracking-wider text-white uppercase flex items-center gap-2">
+              SilentBridge
+              <span class="text-xs px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-mono font-medium">v1.0-OFFLINE</span>
+            </h1>
+          </div>
+          <p class="text-xs text-slate-400 flex items-center gap-1.5 font-mono">
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+            ACOUSTIC P2P MESH // ZERO-INFRASTRUCTURE TELEMETRY
+          </p>
+        </div>
+      </div>
+
+      <!-- Live Engine Controls & Indicators -->
+      <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+        
+        <!-- Frequency Mode Selector -->
+        <div class="flex items-center bg-tactical-850 rounded-lg p-1 border border-tactical-border text-xs font-mono">
+          <button id="btnModeUltrasonic" class="px-2.5 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 bg-cyan-500 text-slate-950 shadow-sm">
+            <i data-lucide="zap" class="w-3.5 h-3.5"></i>
+            <span>18.0-19.5 kHz</span>
+            <span class="hidden sm:inline opacity-80">(Ultrasonic)</span>
+          </button>
+          <button id="btnModeAudible" class="px-2.5 py-1.5 rounded-md font-semibold transition-all text-slate-400 hover:text-white flex items-center gap-1.5">
+            <i data-lucide="volume-2" class="w-3.5 h-3.5"></i>
+            <span>1.5-2.2 kHz</span>
+            <span class="hidden sm:inline opacity-80">(Audible Demo)</span>
+          </button>
+        </div>
+
+        <!-- Audio Modem Power Button -->
+        <button id="btnToggleAudio" class="px-3.5 py-2 rounded-lg font-mono text-xs font-bold transition-all flex items-center gap-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 shadow-sm">
+          <span class="relative flex h-2.5 w-2.5">
+            <span id="audioPowerPing" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span id="audioPowerDot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+          </span>
+          <span id="audioPowerText">MODEM: ACTIVE</span>
+        </button>
+
+        <!-- Help / Protocol Spec Modal Trigger -->
+        <button id="btnOpenHelpModal" class="p-2 rounded-lg bg-tactical-850 hover:bg-tactical-800 text-slate-300 border border-tactical-border transition-colors" title="Protocol Specification & Info">
+          <i data-lucide="info" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Quick Stats Sub-Bar -->
+    <div class="max-w-7xl mx-auto mt-2 pt-2 border-t border-tactical-border/40 grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs font-mono text-slate-400">
+      <div class="flex items-center gap-2">
+        <span class="text-slate-500">TX PACKETS:</span>
+        <span id="statTxCount" class="text-cyan-400 font-bold">0</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-slate-500">RX PACKETS:</span>
+        <span id="statRxCount" class="text-emerald-400 font-bold">0</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-slate-500">RELAYED HOPS:</span>
+        <span id="statRelayCount" class="text-amber-400 font-bold">0</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-slate-500">CRC REJECTIONS:</span>
+        <span id="statCrcErrors" class="text-rose-400 font-bold">0</span>
+      </div>
+      <div class="flex items-center gap-2 col-span-2 sm:col-span-1">
+        <span class="text-slate-500">SIGNAL SNR:</span>
+        <span id="statSnr" class="text-slate-200 font-bold">0.0 dB</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Application Workspace (3-Column Layout on Large Screens) -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+    
+    <!-- LEFT COLUMN: Broadcast SOS Console (lg:col-span-4) -->
+    <section class="lg:col-span-4 flex flex-col gap-4">
+      
+      <!-- Broadcast SOS Card -->
+      <div class="bg-tactical-900/90 border border-tactical-border rounded-xl p-4 sm:p-5 shadow-xl backdrop-blur-sm relative overflow-hidden">
+        <!-- Ambient Alert Glow Accent -->
+        <div class="absolute -top-12 -right-12 w-32 h-32 bg-red-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2">
+            <div class="p-1.5 rounded-md bg-red-500/20 text-red-400 border border-red-500/30">
+              <i data-lucide="siren" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h2 class="font-bold text-white tracking-wide uppercase text-sm">Broadcast Acoustic SOS</h2>
+              <p class="text-[11px] text-slate-400 font-mono">ENCODES 32-BYTE BFSK PACKET</p>
+            </div>
+          </div>
+          <span class="text-[10px] px-2 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 font-mono font-bold uppercase">
+            EMERGENCY
+          </span>
+        </div>
+
+        <form id="sosForm" class="space-y-4" onsubmit="return false;">
+          
+          <!-- 1. Distress Type Selector Grid -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 font-mono flex items-center justify-between">
+              <span>1. Distress Classification</span>
+              <span id="selectedDistressPriority" class="text-[10px] text-red-400">CRITICAL</span>
+            </label>
+            <div class="grid grid-cols-2 gap-2" id="distressTypeGrid">
+              
+              <!-- Medical -->
+              <button type="button" data-distress="1" class="distress-btn active p-2.5 rounded-lg border text-left transition-all flex flex-col gap-1 bg-red-500/20 border-red-500 text-red-300 shadow-sm shadow-red-500/10">
+                <div class="flex items-center justify-between">
+                  <i data-lucide="heart-pulse" class="w-4 h-4 text-red-400"></i>
+                  <span class="text-[10px] font-mono font-bold">TYPE 1</span>
+                </div>
+                <span class="font-bold text-xs">Medical Emergency</span>
+              </button>
+
+              <!-- Trapped -->
+              <button type="button" data-distress="2" class="distress-btn p-2.5 rounded-lg border text-left transition-all flex flex-col gap-1 bg-tactical-850 border-tactical-border text-slate-400 hover:border-orange-500/50 hover:text-orange-300">
+                <div class="flex items-center justify-between">
+                  <i data-lucide="shield-alert" class="w-4 h-4 text-orange-400"></i>
+                  <span class="text-[10px] font-mono font-bold">TYPE 2</span>
+                </div>
+                <span class="font-bold text-xs">Trapped / Collapse</span>
+              </button>
+
+              <!-- Fire -->
+              <button type="button" data-distress="3" class="distress-btn p-2.5 rounded-lg border text-left transition-all flex flex-col gap-1 bg-tactical-850 border-tactical-border text-slate-400 hover:border-rose-500/50 hover:text-rose-300">
+                <div class="flex items-center justify-between">
+                  <i data-lucide="flame" class="w-4 h-4 text-rose-400"></i>
+                  <span class="text-[10px] font-mono font-bold">TYPE 3</span>
+                </div>
+                <span class="font-bold text-xs">Fire / Hazard</span>
+              </button>
+
+              <!-- Shelter/Supplies -->
+              <button type="button" data-distress="4" class="distress-btn p-2.5 rounded-lg border text-left transition-all flex flex-col gap-1 bg-tactical-850 border-tactical-border text-slate-400 hover:border-cyan-500/50 hover:text-cyan-300">
+                <div class="flex items-center justify-between">
+                  <i data-lucide="home" class="w-4 h-4 text-cyan-400"></i>
+                  <span class="text-[10px] font-mono font-bold">TYPE 4</span>
+                </div>
+                <span class="font-bold text-xs">Shelter / Supplies</span>
+              </button>
+
+            </div>
+          </div>
+
+          <!-- 2. Location Telemetry (GPS / Fallback Coords) -->
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider font-mono">
+                2. Geo-Coordinates (IEEE-754)
+              </label>
+              <button type="button" id="btnGetGps" class="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-mono transition-colors">
+                <i data-lucide="crosshair" class="w-3 h-3"></i>
+                <span id="gpsButtonLabel">Get GPS Fix</span>
+              </button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 font-mono text-xs">
+              <div class="relative">
+                <span class="absolute left-2.5 top-2 text-[10px] text-slate-500">LAT</span>
+                <input type="number" step="0.000001" id="inputLat" value="37.7749" class="w-full bg-tactical-950 border border-tactical-border rounded-lg pt-4 pb-1.5 px-2.5 text-white focus:border-cyan-500 focus:outline-none transition-colors">
+              </div>
+              <div class="relative">
+                <span class="absolute left-2.5 top-2 text-[10px] text-slate-500">LON</span>
+                <input type="number" step="0.000001" id="inputLon" value="-122.4194" class="w-full bg-tactical-950 border border-tactical-border rounded-lg pt-4 pb-1.5 px-2.5 text-white focus:border-cyan-500 focus:outline-none transition-colors">
+              </div>
+            </div>
+
+            <!-- Preset Mock Location Buttons for instant testing -->
+            <div class="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 text-[10px] font-mono">
+              <span class="text-slate-500 shrink-0">PRESETS:</span>
+              <button type="button" class="btn-preset-loc px-2 py-0.5 rounded bg-tactical-800 hover:bg-tactical-700 text-slate-300 shrink-0" data-lat="37.7749" data-lon="-122.4194">SF Hub</button>
+              <button type="button" class="btn-preset-loc px-2 py-0.5 rounded bg-tactical-800 hover:bg-tactical-700 text-slate-300 shrink-0" data-lat="40.7128" data-lon="-74.0060">NYC Base</button>
+              <button type="button" class="btn-preset-loc px-2 py-0.5 rounded bg-tactical-800 hover:bg-tactical-700 text-slate-300 shrink-0" data-lat="51.5074" data-lon="-0.1278">London</button>
+              <button type="button" class="btn-preset-loc px-2 py-0.5 rounded bg-tactical-800 hover:bg-tactical-700 text-slate-300 shrink-0" data-lat="35.6762" data-lon="139.6503">Tokyo</button>
+            </div>
+          </div>
+
+          <!-- 3. Short Message (17 Bytes ASCII) -->
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider font-mono">
+                3. Short Distress Message
+              </label>
+              <span id="charCounter" class="text-[11px] font-mono text-cyan-400">0 / 17 Bytes</span>
+            </div>
+            <input type="text" id="inputMessage" maxlength="17" placeholder="e.g. TRAPPED FLOOR 3" value="NEED RESCUE ASAP" class="w-full bg-tactical-950 border border-tactical-border rounded-lg px-3 py-2 text-white font-mono text-sm uppercase placeholder:text-slate-600 focus:border-cyan-500 focus:outline-none transition-colors">
+            
+            <!-- Quick Message Presets -->
+            <div class="flex flex-wrap gap-1.5 mt-2 text-[10px] font-mono">
+              <button type="button" class="btn-preset-msg px-2 py-0.5 rounded bg-tactical-800 hover:bg-tactical-700 text-slate-300" data-msg="NEED RESCUE ASAP">NEED RESCUE ASAP</button>
+              <button type="button" class="btn-preset-msg px-2 py-0.5 rounded bg-tactical-800 hover:bg-tactical-700 text-slate-300" data-msg="TRAPPED FLOOR 3">TRAPPED FLOOR 3</button>
+              <button type="button" class="btn-preset-msg px-2 py-0.5 rounded bg-tactical-800 hover:bg-tactical-700 text-slate-300" data-msg="NEED WATER & MEDS">NEED WATER & MEDS</button>
+              <button type="button" class="btn-preset-msg px-2 py-0.5 rounded bg-tactical-800 hover:bg-tactical-700 text-slate-300" data-msg="GAS LEAK AVOID">GAS LEAK AVOID</button>
+            </div>
+          </div>
+
+          <!-- 4. Mesh Hop Configuration -->
+          <div class="flex items-center justify-between bg-tactical-950 p-2.5 rounded-lg border border-tactical-border font-mono text-xs">
+            <span class="text-slate-400 flex items-center gap-1.5">
+              <i data-lucide="git-fork" class="w-3.5 h-3.5 text-amber-400"></i>
+              INITIAL MESH HOPS (TTL):
+            </span>
+            <div class="flex items-center gap-2">
+              <select id="selectTtl" class="bg-tactical-900 border border-tactical-border rounded px-2 py-1 text-amber-400 font-bold focus:outline-none focus:border-amber-500">
+                <option value="1">1 Hop (Direct)</option>
+                <option value="2">2 Hops</option>
+                <option value="3" selected>3 Hops (Standard)</option>
+                <option value="5">5 Hops (Deep Mesh)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Broadcast Trigger Button -->
+          <div class="pt-1">
+            <button type="button" id="btnBroadcastSos" class="relative w-full py-3.5 px-4 rounded-xl font-mono font-bold text-sm tracking-wider uppercase text-white bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-rose-600 active:scale-[0.98] transition-all shadow-lg shadow-red-900/50 border border-red-500/50 flex items-center justify-center gap-2.5 overflow-hidden group">
+              <i data-lucide="radio" class="w-5 h-5 group-hover:scale-110 transition-transform"></i>
+              <span id="broadcastBtnText">BROADCAST ACOUSTIC SOS</span>
+              <div id="txProgressOverlay" class="absolute inset-0 bg-cyan-500/30 w-0 transition-all duration-75 pointer-events-none"></div>
+            </button>
+            <p class="text-[10px] text-center text-slate-500 font-mono mt-1.5">
+              256-bit BFSK transmission // 18.0 kHz Preamble + 40ms Symbols
+            </p>
+          </div>
+
+        </form>
+      </div>
+
+      <!-- Diagnostic Test Bench & Mesh Node Simulator -->
+      <div class="bg-tactical-900/90 border border-tactical-border rounded-xl p-4 shadow-xl backdrop-blur-sm">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <i data-lucide="flask-conical" class="w-4 h-4 text-cyan-400"></i>
+            <h3 class="font-bold text-white text-xs font-mono uppercase tracking-wider">Test Bench & Simulator</h3>
+          </div>
+          <span class="text-[10px] text-slate-500 font-mono">HACKATHON SUITE</span>
+        </div>
+
+        <p class="text-xs text-slate-400 mb-3">
+          Inject synthetic distress packets to verify protocol decoding, deduplication, and automated mesh relay without sound feedback.
+        </p>
+
+        <div class="grid grid-cols-2 gap-2 font-mono text-xs">
+          <button type="button" id="btnSimulatePacket" class="p-2.5 rounded-lg bg-tactical-850 hover:bg-tactical-800 text-cyan-300 border border-cyan-500/30 transition-colors flex items-center justify-center gap-1.5 font-semibold">
+            <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+            Simulate Mesh Node
+          </button>
+          <button type="button" id="btnLoopbackTest" class="p-2.5 rounded-lg bg-tactical-850 hover:bg-tactical-800 text-emerald-300 border border-emerald-500/30 transition-colors flex items-center justify-center gap-1.5 font-semibold">
+            <i data-lucide="repeat" class="w-3.5 h-3.5"></i>
+            Self Loopback Test
+          </button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- MIDDLE COLUMN: Real-Time Spectrum Analyzer & Signal Monitor (lg:col-span-4) -->
+    <section class="lg:col-span-4 flex flex-col gap-4">
+      
+      <!-- Spectrum & Waterfall Display Card -->
+      <div class="bg-tactical-900/90 border border-tactical-border rounded-xl p-4 sm:p-5 shadow-xl backdrop-blur-sm flex flex-col gap-3">
+        
+        <!-- Header & Receiver State Badge -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="p-1.5 rounded-md bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+              <i data-lucide="activity" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h2 class="font-bold text-white tracking-wide uppercase text-sm">Spectrum Analyzer</h2>
+              <p class="text-[11px] text-slate-400 font-mono">2048-POINT REAL-TIME FFT</p>
+            </div>
+          </div>
+
+          <!-- Receiver State Indicator -->
+          <div class="flex items-center gap-2">
+            <span id="rxStateBadge" class="px-2.5 py-1 rounded-md text-xs font-mono font-bold tracking-wide uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span id="rxStateText">LISTENING</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- Canvas View Mode Tabs -->
+        <div class="flex items-center justify-between text-xs font-mono border-b border-tactical-border/60 pb-2">
+          <div class="flex items-center gap-2">
+            <button id="tabSpectrum" class="px-2.5 py-1 rounded bg-cyan-500/20 text-cyan-300 font-semibold border border-cyan-500/30">
+              Spectrum Bars
+            </button>
+            <button id="tabWaterfall" class="px-2.5 py-1 rounded text-slate-400 hover:text-slate-200">
+              Spectrogram Waterfall
+            </button>
+          </div>
+          <span id="carrierRangeLabel" class="text-[10px] text-slate-500">17.5 - 20.0 kHz</span>
+        </div>
+
+        <!-- HTML5 Spectrum Canvas Mount -->
+        <div class="relative w-full h-56 bg-tactical-950 rounded-lg border border-tactical-border overflow-hidden flex items-center justify-center">
+          <canvas id="visualizerCanvas" class="w-full h-full block"></canvas>
+          
+          <!-- Overlay Crosshair Markers for Target Frequencies -->
+          <div class="absolute inset-0 pointer-events-none flex flex-col justify-between p-2 text-[9px] font-mono text-slate-500">
+            <div class="flex justify-between items-center opacity-60">
+              <span>0 dB</span>
+              <span class="text-cyan-400">FSK TARGET BAND</span>
+              <span>-100 dB</span>
+            </div>
+            <div class="flex justify-between items-center opacity-40">
+              <span id="canvasFreqMin">17.0 kHz</span>
+              <span id="canvasFreqMid">18.5 kHz (Bit 0)</span>
+              <span id="canvasFreqMax">20.0 kHz</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Signal Telemetry HUD -->
+        <div class="grid grid-cols-3 gap-2 bg-tactical-950 p-2.5 rounded-lg border border-tactical-border text-center font-mono text-xs">
+          <div>
+            <span class="text-[10px] text-slate-500 block">PEAK FREQ</span>
+            <span id="hudPeakFreq" class="text-cyan-400 font-bold">18,500 Hz</span>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-500 block">NOISE FLOOR</span>
+            <span id="hudNoiseFloor" class="text-slate-300 font-bold">-84.2 dB</span>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-500 block">SIGNAL SNR</span>
+            <span id="hudSnr" class="text-emerald-400 font-bold">16.4 dB</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Live Bit Stream Demodulator Monitor -->
+      <div class="bg-tactical-900/90 border border-tactical-border rounded-xl p-4 shadow-xl backdrop-blur-sm flex flex-col gap-2.5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i data-lucide="binary" class="w-4 h-4 text-emerald-400"></i>
+            <h3 class="font-bold text-white text-xs font-mono uppercase tracking-wider">Demodulator Bit Stream</h3>
+          </div>
+          <span id="rxBitCounter" class="text-[10px] font-mono text-cyan-400">0 / 256 BITS</span>
+        </div>
+
+        <!-- Bit Stream Stream Viewer -->
+        <div class="bg-tactical-950 border border-tactical-border rounded-lg p-2.5 h-24 overflow-y-auto font-mono text-xs text-emerald-400/90 break-all leading-relaxed" id="bitStreamViewer">
+          <span class="text-slate-600">// Awaiting acoustic BFSK preamble sync...</span>
+        </div>
+
+        <!-- Progress Bar for Active Packet Demodulation -->
+        <div class="w-full bg-tactical-950 rounded-full h-1.5 overflow-hidden border border-tactical-border">
+          <div id="rxProgressBar" class="bg-gradient-to-r from-cyan-500 to-emerald-400 h-full w-0 transition-all duration-75"></div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- RIGHT COLUMN: Geo-Tactical Map & Live Emergency Feed (lg:col-span-4) -->
+    <section class="lg:col-span-4 flex flex-col gap-4">
+      
+      <!-- Interactive Leaflet Map Card -->
+      <div class="bg-tactical-900/90 border border-tactical-border rounded-xl p-4 sm:p-5 shadow-xl backdrop-blur-sm flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="p-1.5 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30">
+              <i data-lucide="map-pin" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h2 class="font-bold text-white tracking-wide uppercase text-sm">Geo-Tactical Mesh Map</h2>
+              <p class="text-[11px] text-slate-400 font-mono">OFFLINE LEAFLET.JS RADAR</p>
+            </div>
+          </div>
+          <button id="btnRecenterMap" class="p-1.5 rounded bg-tactical-850 hover:bg-tactical-800 text-slate-300 border border-tactical-border text-xs font-mono flex items-center gap-1">
+            <i data-lucide="locate" class="w-3.5 h-3.5"></i>
+            Recenter
+          </button>
+        </div>
+
+        <!-- Leaflet Map Mount -->
+        <div class="relative w-full h-64 bg-tactical-950 rounded-lg border border-tactical-border overflow-hidden">
+          <div id="map" class="w-full h-full z-10"></div>
+          
+          <!-- Offline Map Fallback Indicator -->
+          <div class="absolute bottom-2 left-2 z-20 px-2 py-1 rounded bg-tactical-950/90 border border-tactical-border text-[9px] font-mono text-slate-400">
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1"></span>
+            LOCAL MESH GRID
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Emergency Distress Feed -->
+      <div class="bg-tactical-900/90 border border-tactical-border rounded-xl p-4 shadow-xl backdrop-blur-sm flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i data-lucide="radio-tower" class="w-4 h-4 text-red-400"></i>
+            <h3 class="font-bold text-white text-xs font-mono uppercase tracking-wider">Live SOS Telemetry Feed</h3>
+          </div>
+          <button id="btnClearFeed" class="text-[10px] text-slate-500 hover:text-slate-300 font-mono">
+            Clear Feed
+          </button>
+        </div>
+
+        <!-- Scrollable Feed of Verified Beacons -->
+        <div id="emergencyFeedList" class="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+          <!-- Empty State -->
+          <div id="feedEmptyState" class="p-6 text-center border border-dashed border-tactical-border rounded-lg bg-tactical-950/50 text-slate-500 font-mono text-xs">
+            <i data-lucide="shield-check" class="w-8 h-8 mx-auto mb-2 text-slate-600"></i>
+            No active distress beacons received.<br>
+            Acoustic listener standing by on carrier frequencies.
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Modals -->
+
+  <!-- 1. Raw Hex Packet Inspector Modal -->
+  <dialog id="hexModal" class="bg-transparent backdrop:bg-black/80 p-4 max-w-lg w-full z-50 rounded-xl">
+    <div class="bg-tactical-900 border border-tactical-border rounded-xl p-5 shadow-2xl text-slate-200">
+      <div class="flex items-center justify-between border-b border-tactical-border pb-3 mb-4">
+        <div class="flex items-center gap-2">
+          <i data-lucide="file-code" class="w-5 h-5 text-cyan-400"></i>
+          <h3 class="font-bold text-white font-mono uppercase tracking-wider text-sm">32-Byte Packet Inspector</h3>
+        </div>
+        <button id="btnCloseHexModal" class="p-1 rounded bg-tactical-800 hover:bg-tactical-700 text-slate-400">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 font-mono text-xs">
+        <div>
+          <span class="text-slate-500 block mb-1">RAW HEX DUMP (32 BYTES):</span>
+          <div id="modalHexDump" class="p-2.5 rounded bg-tactical-950 border border-tactical-border text-cyan-300 break-all select-all font-bold">
+            AA 00 00 00 00 ...
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 bg-tactical-950 p-3 rounded-lg border border-tactical-border text-[11px]">
+          <div><span class="text-slate-500">Sync Byte:</span> <span id="modalSync" class="text-emerald-400">0xAA</span></div>
+          <div><span class="text-slate-500">Message ID:</span> <span id="modalMsgId" class="text-cyan-400">#0000</span></div>
+          <div><span class="text-slate-500">Distress Type:</span> <span id="modalType" class="text-red-400">1 (Medical)</span></div>
+          <div><span class="text-slate-500">TTL / Hops:</span> <span id="modalTtl" class="text-amber-400">3</span></div>
+          <div><span class="text-slate-500">Latitude:</span> <span id="modalLat" class="text-slate-200">0.000000</span></div>
+          <div><span class="text-slate-500">Longitude:</span> <span id="modalLon" class="text-slate-200">0.000000</span></div>
+          <div class="col-span-2"><span class="text-slate-500">Short ASCII:</span> <span id="modalMsg" class="text-white font-bold">"..."</span></div>
+          <div class="col-span-2"><span class="text-slate-500">CRC-16 (CCITT):</span> <span id="modalCrc" class="text-emerald-400">0x0000 (VALID)</span></div>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- 2. Hackathon Info & Architecture Modal -->
+  <dialog id="helpModal" class="bg-transparent backdrop:bg-black/80 p-4 max-w-xl w-full z-50 rounded-xl">
+    <div class="bg-tactical-900 border border-tactical-border rounded-xl p-5 shadow-2xl text-slate-200">
+      <div class="flex items-center justify-between border-b border-tactical-border pb-3 mb-4">
+        <div class="flex items-center gap-2">
+          <i data-lucide="cpu" class="w-5 h-5 text-cyan-400"></i>
+          <h3 class="font-bold text-white font-mono uppercase tracking-wider text-sm">SilentBridge Architecture</h3>
+        </div>
+        <button id="btnCloseHelpModal" class="p-1 rounded bg-tactical-800 hover:bg-tactical-700 text-slate-400">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs leading-relaxed text-slate-300">
+        <p>
+          <strong class="text-cyan-400 font-mono">SilentBridge</strong> is an emergency offline acoustic peer-to-peer mesh communicator designed for extreme disaster scenarios where cell towers, Wi-Fi, internet, and satellite uplinks are compromised.
+        </p>
+
+        <div class="p-3 bg-tactical-950 rounded-lg border border-tactical-border space-y-1.5 font-mono text-[11px]">
+          <div class="text-cyan-400 font-bold">// ACOUSTIC MODULATION SPECIFICATION</div>
+          <div>• Preamble Tone: <span class="text-white">18.0 kHz (100ms)</span></div>
+          <div>• Bit 0 Frequency: <span class="text-white">18.5 kHz (40ms)</span></div>
+          <div>• Bit 1 Frequency: <span class="text-white">19.5 kHz (40ms)</span></div>
+          <div>• Guard Interval: <span class="text-white">5ms silence</span></div>
+          <div>• Packet Layout: <span class="text-white">Fixed 32 Bytes (256 Bits) with CCITT CRC-16</span></div>
+          <div>• Automated Mesh Hop: <span class="text-white">TTL Decrement + Jitter Backoff (800-1800ms)</span></div>
+        </div>
+
+        <p>
+          Each receiving device verifies the packet's CCITT CRC-16 checksum, extracts GPS coordinates, displays the distress alert on an offline tactical radar map, and automatically relays the packet if hops remain (<code class="text-amber-400">TTL &gt; 0</code>).
+        </p>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Modular Scripts -->
+  <script src="crc16.js"></script>
+  <script src="packetEngine.js"></script>
+  <script src="audioModem.js"></script>
+  <script src="app.js"></script>
+
+  <script>
+    // Initialize Lucide icons on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+    });
+  </script>
+</body>
+</html>
