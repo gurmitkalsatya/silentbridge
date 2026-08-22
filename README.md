@@ -73,29 +73,44 @@ All telemetry is serialized into a fixed 32-byte (`ArrayBuffer`) payload:
 
 ---
 
-## 🚀 How to Test & Demo (Even in Airplane Mode!)
+## 🚀 Live Deployment & Online URLs
 
-### 1. Run Locally
+SilentBridge is deployed to GitHub Pages and ready for instant use across any browser:
+
+- **📱 Survivor SOS Portal**: **[https://gurmitkalsatya.github.io/silentbridge/sender.html](https://gurmitkalsatya.github.io/silentbridge/sender.html)**
+- **🛡️ Rescuer Command Portal**: **[https://gurmitkalsatya.github.io/silentbridge/receiver.html](https://gurmitkalsatya.github.io/silentbridge/receiver.html)** *(Master Password: `admin@321`)*
+- **🌐 Main Unified Entry**: **[https://gurmitkalsatya.github.io/silentbridge/](https://gurmitkalsatya.github.io/silentbridge/)**
+
+---
+
+## 🖐️ Safety Dispatch Pipeline & Anti-Spam Protection
+
+SilentBridge includes a triple-layer safety dispatch architecture to eliminate accidental activations while supporting hands-free emergency dispatch:
+
+1. **🖐️ 1.5-Second Gesture Hold Threshold**:
+   - Uses **MediaPipe Hands** to detect `✊ Closed Fist` (Panic/Trapped), `☝️ Pointing Index` (Medical), and `✌️ V-Sign` (Evacuation/Rescue).
+   - Requires holding the gesture continuously for **1.5 seconds** (1500ms) with a real-time progress HUD (0% to 100%).
+   - If the hand moves, changes gesture, or exits the camera frame before 1.5s, the timer **immediately resets to 0%**.
+2. **🚨 5-Second Cancel / Undo Overlay**:
+   - Once armed (via gesture or 1-Tap SOS), a prominent red modal overlay counts down from **5s to 1s** with a shrinking progress bar.
+   - Clicking **`🛑 CANCEL / UNDO DISPATCH`** immediately aborts the timer and sends zero network/acoustic data.
+3. **⏳ 60-Second Anti-Spam Cooldown**:
+   - Once dispatched, the survivor UI locks into a **60-second cooldown** to prevent accidental airwave flooding.
+   - All gesture triggers and buttons are locked (`opacity-50 pointer-events-none`) with a live `⏳ Anti-Spam Cooldown: Xs remaining` badge.
+4. **🤖 Automated False Alarm Triage & Siren Suppression**:
+   - Distress beacons lacking voice SOS audio or with invalid GPS coordinates are automatically tagged as potential hoaxes with a muted alert, sparing rescue teams from false panic.
+
+---
+
+## 🏃 Run Locally
+
 ```bash
 python -m http.server 8080
 ```
-Open in Chrome, Edge, Safari, or Firefox.
-
-### 2. Live URLs
-
-- **📱 Survivor Portal**: **[http://localhost:8080/sender.html](http://localhost:8080/sender.html)**
-- **🛡️ Rescuer Portal**: **[http://localhost:8080/receiver.html](http://localhost:8080/receiver.html)**
-
-### 3. Step-by-Step Emergency Demo Flow:
-
-1. **Rescue Sign In**: Open `receiver.html`, sign in with `commander@rescue.org` / `rescue911` (or click **"1-Click Demo Login"**).
-2. **Survivor 1-Tap SOS**: Open `sender.html`, verify **"🛰️ GNSS SATELLITE FIX LOCKED"**, and click **"⚡ 1-TAP INSTANT PANIC SOS"**.
-3. **Rescue Siren**: On `receiver.html`, the emergency beacon arrives and the **loud emergency rescue siren** wails automatically.
-4. **Google Maps Routing**: Rescuer clicks **"Open in Google Maps ↗"** to route to the exact coordinates or **"Play Voice SOS"**.
-5. **Dispatch ACK**: Rescuer clicks **"🚨 Dispatch Rescue & Send ACK"**.
-6. **Green Dashboard Confirmation**: On `sender.html`, the survivor's dashboard **turns vivid glowing green** with **"✅ RESCUE ACK RECEIVED"** and an audio confirmation chime.
+Open **[http://localhost:8080/sender.html](http://localhost:8080/sender.html)** in any browser.
 
 ---
 
 ## 🛡️ License
 MIT License. Created for the Open Innovation Hackathon.
+
