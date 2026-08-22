@@ -1,12 +1,14 @@
 /**
  * SilentBridge - Main Application Controller
  * Features:
- *  - Dedicated Sender, Receiver, and Unified Mesh role views.
- *  - High-Accuracy GPS tracking with accuracy confidence circles and live pin-pointing.
- *  - Emergency Voice Memo Recorder with live mic waveform visualization.
- *  - Cross-tab & acoustic synchronized Voice SOS transmission and reception.
- *  - Rescue Command Voice Dispatch Audio Player with +6dB field gain booster and live playback visualizer.
- *  - Dual Leaflet radar maps, 2048-point FFT spectrum visualizer, and CCITT CRC-16 telemetry feed.
+ *  - 6 Disaster Classifications (Medical, Trapped, Fire, Flood, Earthquake, Supplies).
+ *  - Interactive Sender-Side Map with Draggable Pinpoint Marker.
+ *  - High-Accuracy GPS Telemetry with confidence radius.
+ *  - Emergency Voice Memo Recorder with live mic waveform visualizer, Playback Preview & Re-Record options.
+ *  - Form Auto-Clearing upon SOS dispatch.
+ *  - Multi-Sender Live Triage Feed with Individual Voice Playback & Exact Coordinates.
+ *  - Bidirectional Rescue Acknowledgment (ACK) System (Receiver dispatches ACK -> Sender receives live confirmation).
+ *  - 100% Offline Acoustic BFSK Carrier Transmission & Cross-Tab Broadcast Synchronization.
  */
 
 (function () {
@@ -16,25 +18,32 @@
   const AppState = {
     currentRole: 'mesh', // 'sender' | 'receiver' | 'mesh'
     audioModem: null,
+    
+    // Leaflet Map Instances
+    senderMap: null,
+    senderDraggableMarker: null,
     receiverMap: null,
     meshMap: null,
     receiverUserMarker: null,
-    receiverAccuracyCircle: null,
     meshUserMarker: null,
-    meshAccuracyCircle: null,
-    distressMarkers: new Map(), // messageId -> Leaflet Layer
-    receivedPackets: [],       // Array of parsed packet objects
+    distressMarkers: new Map(), // key -> Leaflet Layer
+
+    // Telemetry & Packets
+    receivedPackets: [],       // Array of parsed packet objects from multiple senders
     seenPacketIds: new Set(),
-    activeDistressType: 1,
+    activeDistressType: 1,     // 1 to 6
     currentLat: 37.774900,
     currentLon: -122.419400,
     gpsAccuracyMeters: 3.5,
     gpsWatchId: null,
-    visualizerMode: 'spectrum', // 'spectrum' | 'waterfall'
+    lastSentMessageId: null,
+
+    // Spectrum Visualizer
+    visualizerMode: 'spectrum',
     waterfallHistory: [],
     waterfallMaxRows: 120,
-    
-    // Voice Recording State (Sender)
+
+    // Voice Memo State (Sender)
     voice: {
       mediaRecorder: null,
       audioStream: null,
@@ -46,8 +55,7 @@
       recordingStartTime: 0,
       recordingTimerId: null,
       analyser: null,
-      audioCtx: null,
-      waveformPeaks: []
+      audioCtx: null
     },
 
     // Voice Playback State (Receiver)
@@ -55,15 +63,13 @@
       activePacket: null,
       audioElement: null,
       audioCtx: null,
-      sourceNode: null,
       gainNode: null,
       analyserNode: null,
-      boostMultiplier: 1.0, // 1.0x, 2.0x, 3.0x
-      isPlaying: false,
-      animationFrameId: null
+      boostMultiplier: 1.0,
+      isPlaying: false
     },
 
-    // BroadcastChannel for cross-tab multi-device sync
+    // Cross-Tab Multi-Device Synchronization
     syncChannel: null,
 
     // Statistics
@@ -71,8 +77,8 @@
       txCount: 0,
       rxCount: 0,
       voiceCount: 0,
-      relayCount: 0,
-      crcErrors: 0
+      ackCount: 0,
+      relayCount: 0
     }
   };
 
@@ -116,6 +122,16 @@
     return `${m.toString().padStart(2, '0')}:${rem.toString().padStart(2, '0')}`;
   }
 
+  function updateClock() {
+    const now = new Date();
+    const timeStr = now.toTimeString().split(' ')[0];
+    const statClock = document.getElementById('statClock');
+    const senderClock = document.getElementById('senderClock');
+
+    if (statClock) statClock.textContent = timeStr;
+    if (senderClock) senderClock.textContent = `LIVE TIME: ${timeStr}`;
+  }
+
   /* -------------------------------------------------------------------------- */
   /*                      ROLE & VIEW SWITCHER (SENDER / RX / MESH)             */
   /* -------------------------------------------------------------------------- */
@@ -132,17 +148,15 @@
     const viewReceiver = document.getElementById('viewReceiver');
     const viewMesh = document.getElementById('viewMesh');
 
-    // Reset button styles
     [navSender, navReceiver, navMesh].forEach(btn => {
-      if (btn) {
-        btn.className = 'role-nav-btn px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-2 text-slate-400 hover:text-white';
-      }
+      if (btn) btn.className = 'role-nav-btn px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-2 text-slate-400 hover:text-white';
     });
 
-    // Hide all views
     [viewSender, viewReceiver, viewMesh].forEach(v => {
-      if (v) v.classList.add('hidden');
-      if (v) v.classList.remove('flex');
+      if (v) {
+        v.classList.add('hidden');
+        v.classList.remove('flex');
+      }
     });
 
     if (role === 'sender') {
@@ -151,6 +165,9 @@
         viewSender.classList.remove('hidden');
         viewSender.classList.add('flex');
       }
+      setTimeout(() => {
+        if (AppState.senderMap) AppState.senderMap.invalidateSize();
+      }, 100);
     } else if (role === 'receiver') {
       if (navReceiver) navReceiver.className = 'role-nav-btn active px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-2 bg-cyan-500 text-slate-950 shadow-md';
       if (viewReceiver) {
@@ -161,7 +178,6 @@
         if (AppState.receiverMap) AppState.receiverMap.invalidateSize();
       }, 100);
     } else {
-      // Mesh (Default / Dual)
       if (navMesh) navMesh.className = 'role-nav-btn active px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-2 bg-cyan-500 text-slate-950 shadow-md';
       if (viewMesh) {
         viewMesh.classList.remove('hidden');
@@ -188,33 +204,25 @@
   /* -------------------------------------------------------------------------- */
 
   function initGpsTracking() {
-    if (!navigator.geolocation) {
-      console.warn('Geolocation API not supported.');
-      return;
-    }
-
     acquireHighAccuracyGps();
 
-    // Continuous watch for field responder positioning
-    try {
-      AppState.gpsWatchId = navigator.geolocation.watchPosition(
-        (pos) => onGpsSuccess(pos),
-        (err) => console.warn('GPS Watch Notice:', err.message),
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 }
-      );
-    } catch (e) {
-      console.warn('GPS Watch failed:', e);
+    if (navigator.geolocation) {
+      try {
+        AppState.gpsWatchId = navigator.geolocation.watchPosition(
+          (pos) => onGpsSuccess(pos),
+          (err) => console.warn('GPS Watch Notice:', err.message),
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 }
+        );
+      } catch (e) {}
     }
   }
 
   function acquireHighAccuracyGps() {
     const btnSenderLabel = document.getElementById('senderGpsLabel');
-    const btnMeshLabel = document.getElementById('meshGpsLabel');
-    if (btnSenderLabel) btnSenderLabel.textContent = 'Acquiring GPS Fix...';
-    if (btnMeshLabel) btnMeshLabel.textContent = 'Acquiring GPS...';
+    if (btnSenderLabel) btnSenderLabel.textContent = 'Acquiring GPS...';
 
     if (!navigator.geolocation) {
-      alert('Geolocation API is not available on this browser/device.');
+      alert('Geolocation API is not supported on this browser.');
       return;
     }
 
@@ -222,12 +230,10 @@
       (pos) => {
         onGpsSuccess(pos);
         if (btnSenderLabel) btnSenderLabel.textContent = 'GPS Locked ✓';
-        if (btnMeshLabel) btnMeshLabel.textContent = 'GPS Locked ✓';
       },
       (err) => {
-        console.warn('High-accuracy GPS fix failed or timed out:', err);
+        console.warn('GPS fix notice:', err.message);
         if (btnSenderLabel) btnSenderLabel.textContent = 'Retry GPS Fix';
-        if (btnMeshLabel) btnMeshLabel.textContent = 'Retry GPS';
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
     );
@@ -236,13 +242,16 @@
   function onGpsSuccess(pos) {
     const lat = pos.coords.latitude;
     const lon = pos.coords.longitude;
-    const accuracy = pos.coords.accuracy || 4.0;
+    const accuracy = pos.coords.accuracy || 3.5;
 
     AppState.currentLat = lat;
     AppState.currentLon = lon;
     AppState.gpsAccuracyMeters = accuracy;
 
-    // Update form coordinate inputs
+    updateCoordinatesUI(lat, lon, accuracy);
+  }
+
+  function updateCoordinatesUI(lat, lon, accuracy) {
     const sLat = document.getElementById('senderInputLat');
     const sLon = document.getElementById('senderInputLon');
     const mLat = document.getElementById('meshInputLat');
@@ -253,19 +262,12 @@
     if (mLat) mLat.value = lat.toFixed(6);
     if (mLon) mLon.value = lon.toFixed(6);
 
-    // Update GPS Accuracy Badges
-    const accStr = `±${accuracy.toFixed(1)}m (${accuracy <= 5 ? 'HIGH PRECISION' : accuracy <= 20 ? 'GOOD FIX' : 'APPROXIMATE'})`;
-    const statGpsAcc = document.getElementById('statGpsAccuracy');
     const sAccPill = document.getElementById('senderGpsAccuracyPill');
-
-    if (statGpsAcc) statGpsAcc.textContent = `±${accuracy.toFixed(1)}m`;
     if (sAccPill) {
-      sAccPill.textContent = accStr;
-      sAccPill.className = accuracy <= 5 ? 'text-emerald-400 font-bold' : accuracy <= 20 ? 'text-cyan-400 font-bold' : 'text-amber-400 font-bold';
+      sAccPill.textContent = `± ${accuracy.toFixed(1)}m (${accuracy <= 5 ? 'High Precision' : 'GPS Fix'})`;
     }
 
-    // Update Map Markers & Accuracy Rings
-    updateMapPositions(lat, lon, accuracy);
+    updateMapPositions(lat, lon);
   }
 
   /* -------------------------------------------------------------------------- */
@@ -275,7 +277,56 @@
   function initMaps() {
     if (typeof L === 'undefined') return;
 
-    // 1. Receiver Radar Map
+    // 1. Sender Interactive Pinpoint Map
+    const senderMapEl = document.getElementById('senderMap');
+    if (senderMapEl) {
+      AppState.senderMap = L.map('senderMap', {
+        zoomControl: true,
+        attributionControl: false
+      }).setView([AppState.currentLat, AppState.currentLon], 14);
+
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19,
+        subdomains: 'abcd'
+      }).addTo(AppState.senderMap);
+
+      // Create Draggable Pin
+      const pinIcon = L.divIcon({
+        className: 'sender-pin-marker',
+        html: `
+          <div class="relative flex items-center justify-center w-10 h-10">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-60"></span>
+            <div class="relative inline-flex items-center justify-center rounded-full h-6 w-6 bg-red-600 border-2 border-white shadow-xl text-[10px] font-extrabold text-white font-mono cursor-grab">
+              SOS
+            </div>
+          </div>
+        `,
+        iconSize: [40, 40],
+        iconAnchor: [20, 20]
+      });
+
+      AppState.senderDraggableMarker = L.marker([AppState.currentLat, AppState.currentLon], {
+        icon: pinIcon,
+        draggable: true
+      }).addTo(AppState.senderMap);
+
+      AppState.senderDraggableMarker.on('dragend', (e) => {
+        const latLng = e.target.getLatLng();
+        AppState.currentLat = latLng.lat;
+        AppState.currentLon = latLng.lng;
+        updateCoordinatesUI(latLng.lat, latLng.lng, 1.0);
+      });
+
+      // Click map to reposition pin
+      AppState.senderMap.on('click', (e) => {
+        AppState.currentLat = e.latlng.lat;
+        AppState.currentLon = e.latlng.lng;
+        AppState.senderDraggableMarker.setLatLng(e.latlng);
+        updateCoordinatesUI(e.latlng.lat, e.latlng.lng, 1.0);
+      });
+    }
+
+    // 2. Receiver Radar Map
     const rxMapEl = document.getElementById('receiverMap');
     if (rxMapEl) {
       AppState.receiverMap = L.map('receiverMap', {
@@ -289,7 +340,7 @@
       }).addTo(AppState.receiverMap);
     }
 
-    // 2. Unified Mesh Map
+    // 3. Unified Mesh Map
     const meshMapEl = document.getElementById('meshMap');
     if (meshMapEl) {
       AppState.meshMap = L.map('meshMap', {
@@ -303,71 +354,43 @@
       }).addTo(AppState.meshMap);
     }
 
-    // Update Initial Node Markers
-    updateMapPositions(AppState.currentLat, AppState.currentLon, AppState.gpsAccuracyMeters);
+    updateMapPositions(AppState.currentLat, AppState.currentLon);
   }
 
-  function updateMapPositions(lat, lon, accuracy) {
+  function updateMapPositions(lat, lon) {
     if (typeof L === 'undefined') return;
 
-    // User Marker DivIcon
+    if (AppState.senderDraggableMarker) {
+      AppState.senderDraggableMarker.setLatLng([lat, lon]);
+    }
+
     const userIcon = L.divIcon({
       className: 'custom-user-marker',
       html: `
         <div class="relative flex items-center justify-center w-8 h-8">
           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-60"></span>
-          <span class="relative inline-flex items-center justify-center rounded-full h-4 w-4 bg-cyan-500 border-2 border-slate-950 shadow-lg text-[8px] font-bold text-slate-950 font-mono">ME</span>
+          <span class="relative inline-flex items-center justify-center rounded-full h-4 w-4 bg-cyan-500 border-2 border-slate-950 shadow-lg text-[8px] font-bold text-slate-950 font-mono">HQ</span>
         </div>
       `,
       iconSize: [32, 32],
       iconAnchor: [16, 16]
     });
 
-    // Update Receiver Map
     if (AppState.receiverMap) {
       if (AppState.receiverUserMarker) {
         AppState.receiverUserMarker.setLatLng([lat, lon]);
       } else {
         AppState.receiverUserMarker = L.marker([lat, lon], { icon: userIcon }).addTo(AppState.receiverMap)
-          .bindPopup(`<div class="p-1 font-mono text-xs text-slate-200"><strong class="text-cyan-400">LOCAL BASE NODE</strong><br>Lat: ${lat.toFixed(6)}<br>Lon: ${lon.toFixed(6)}<br>Acc: ±${accuracy.toFixed(1)}m</div>`);
-      }
-
-      if (AppState.receiverAccuracyCircle) {
-        AppState.receiverAccuracyCircle.setLatLng([lat, lon]);
-        AppState.receiverAccuracyCircle.setRadius(accuracy);
-      } else {
-        AppState.receiverAccuracyCircle = L.circle([lat, lon], {
-          radius: accuracy,
-          color: '#06B6D4',
-          fillColor: '#06B6D4',
-          fillOpacity: 0.12,
-          weight: 1.5,
-          dashArray: '4, 4'
-        }).addTo(AppState.receiverMap);
+          .bindPopup(`<div class="p-1 font-mono text-xs text-slate-200"><strong class="text-cyan-400">RESCUE HQ BASE</strong><br>Lat: ${lat.toFixed(6)}<br>Lon: ${lon.toFixed(6)}</div>`);
       }
     }
 
-    // Update Mesh Map
     if (AppState.meshMap) {
       if (AppState.meshUserMarker) {
         AppState.meshUserMarker.setLatLng([lat, lon]);
       } else {
         AppState.meshUserMarker = L.marker([lat, lon], { icon: userIcon }).addTo(AppState.meshMap)
-          .bindPopup(`<div class="p-1 font-mono text-xs text-slate-200"><strong class="text-cyan-400">LOCAL NODE</strong><br>Lat: ${lat.toFixed(6)}<br>Lon: ${lon.toFixed(6)}</div>`);
-      }
-
-      if (AppState.meshAccuracyCircle) {
-        AppState.meshAccuracyCircle.setLatLng([lat, lon]);
-        AppState.meshAccuracyCircle.setRadius(accuracy);
-      } else {
-        AppState.meshAccuracyCircle = L.circle([lat, lon], {
-          radius: accuracy,
-          color: '#06B6D4',
-          fillColor: '#06B6D4',
-          fillOpacity: 0.12,
-          weight: 1.5,
-          dashArray: '4, 4'
-        }).addTo(AppState.meshMap);
+          .bindPopup(`<div class="p-1 font-mono text-xs text-slate-200"><strong class="text-cyan-400">HQ NODE</strong><br>Lat: ${lat.toFixed(6)}<br>Lon: ${lon.toFixed(6)}</div>`);
       }
     }
   }
@@ -401,13 +424,13 @@
           <span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">#${packet.messageId}</span>
         </div>
         <div class="text-white font-bold">"${packet.message}"</div>
+        <div class="text-slate-400 text-[11px]">Time: <span class="text-slate-300 font-bold">${packet.timeString || 'Recent'}</span></div>
         <div class="text-slate-400 text-[11px]">Distance: <span class="text-cyan-400 font-bold">${distStr}</span></div>
-        <div class="text-slate-400 text-[11px]">Voice Attached: <span class="${packet.hasVoice ? 'text-rose-400 font-bold' : 'text-slate-500'}">${packet.hasVoice ? 'YES (Audio Memo)' : 'No (Text SOS)'}</span></div>
+        <div class="text-slate-400 text-[11px]">Voice Attached: <span class="${packet.hasVoice ? 'text-rose-400 font-bold' : 'text-slate-500'}">${packet.hasVoice ? 'YES (Audio Memo)' : 'No'}</span></div>
         <div class="text-[10px] text-slate-500">${packet.latitude.toFixed(6)}, ${packet.longitude.toFixed(6)}</div>
       </div>
     `;
 
-    // Add to Receiver Map
     if (AppState.receiverMap) {
       const rxMarker = L.marker([packet.latitude, packet.longitude], { icon: distressIcon })
         .addTo(AppState.receiverMap)
@@ -415,7 +438,6 @@
       AppState.distressMarkers.set(`rx_${packet.messageId}`, rxMarker);
     }
 
-    // Add to Mesh Map
     if (AppState.meshMap) {
       const meshMarker = L.marker([packet.latitude, packet.longitude], { icon: distressIcon })
         .addTo(AppState.meshMap)
@@ -425,12 +447,13 @@
   }
 
   /* -------------------------------------------------------------------------- */
-  /*               EMERGENCY VOICE MEMO RECORDER ENGINE (SENDER)                */
+  /*            EMERGENCY VOICE RECORDER & RE-RECORD ENGINE (SENDER)            */
   /* -------------------------------------------------------------------------- */
 
   function initVoiceRecorder() {
     const btnToggleRecord = document.getElementById('btnToggleRecordVoice');
     const btnMeshToggleRecord = document.getElementById('btnMeshToggleRecord');
+    const btnReRecord = document.getElementById('btnReRecordVoice');
     const btnPlayPreview = document.getElementById('btnPlayVoicePreview');
     const btnDiscard = document.getElementById('btnDiscardVoice');
 
@@ -451,6 +474,13 @@
         } else {
           startVoiceRecording();
         }
+      });
+    }
+
+    if (btnReRecord) {
+      btnReRecord.addEventListener('click', () => {
+        discardVoiceRecording();
+        startVoiceRecording();
       });
     }
 
@@ -482,7 +512,6 @@
       AppState.voice.audioStream = stream;
       AppState.voice.audioChunks = [];
 
-      // Determine supported mimeType
       let mimeType = 'audio/webm;codecs=opus';
       if (!MediaRecorder.isTypeSupported(mimeType)) {
         mimeType = MediaRecorder.isTypeSupported('audio/ogg;codecs=opus') ? 'audio/ogg;codecs=opus' : '';
@@ -501,7 +530,6 @@
         onVoiceRecordingStopped();
       };
 
-      // Set up AudioContext & Analyser for live waveform visualizer during recording
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (AudioCtx) {
         AppState.voice.audioCtx = new AudioCtx();
@@ -515,10 +543,8 @@
       AppState.voice.isRecording = true;
       AppState.voice.recordingStartTime = Date.now();
 
-      // Update UI
       updateVoiceRecorderUI(true);
 
-      // Start 10s countdown timer
       const maxSeconds = 10;
       AppState.voice.recordingTimerId = setInterval(() => {
         const elapsed = (Date.now() - AppState.voice.recordingStartTime) / 1000;
@@ -533,8 +559,8 @@
       }, 100);
 
     } catch (err) {
-      console.error('Failed to access microphone for voice recording:', err);
-      alert('Microphone access is required to record emergency voice memos.');
+      console.error('Mic access error:', err);
+      alert('Microphone access is needed to record emergency voice memos.');
     }
   }
 
@@ -564,7 +590,6 @@
     AppState.voice.blob = blob;
     AppState.voice.durationSeconds = Math.max(0.5, (Date.now() - AppState.voice.recordingStartTime) / 1000);
 
-    // Convert to Base64 dataURL for cross-tab sync
     const reader = new FileReader();
     reader.onloadend = () => {
       AppState.voice.dataUrl = reader.result;
@@ -603,14 +628,14 @@
       if (window.lucide) window.lucide.createIcons();
     };
 
-    audio.play().catch(e => console.warn('Preview play error:', e));
+    audio.play().catch(() => {});
   }
 
   function updateVoiceRecorderUI(isRecording) {
     const btnText = document.getElementById('recordBtnText');
     const btnIcon = document.getElementById('recordIcon');
-    const badge = document.getElementById('voiceRecorderStatusBadge');
-    const idlePrompt = document.getElementById('voiceCanvasIdlePrompt');
+    const badge = document.getElementById('senderVoiceStatusBadge');
+    const idlePrompt = document.getElementById('senderVoiceIdlePrompt');
     const btnRecord = document.getElementById('btnToggleRecordVoice');
     const meshStatus = document.getElementById('meshVoiceStatus');
 
@@ -639,9 +664,10 @@
   }
 
   function showVoiceAttachedUI(hasVoice) {
-    const banner = document.getElementById('voiceAttachedBanner');
-    const meta = document.getElementById('voiceAttachedMeta');
+    const banner = document.getElementById('senderVoiceAttachedBanner');
+    const meta = document.getElementById('senderVoiceAttachedMeta');
     const btnPlay = document.getElementById('btnPlayVoicePreview');
+    const btnReRecord = document.getElementById('btnReRecordVoice');
     const btnDiscard = document.getElementById('btnDiscardVoice');
     const meshStatus = document.getElementById('meshVoiceStatus');
 
@@ -649,13 +675,15 @@
       if (banner) banner.classList.remove('hidden');
       if (meta) meta.textContent = `Voice Memo Attached (${AppState.voice.durationSeconds.toFixed(1)}s)`;
       if (btnPlay) btnPlay.disabled = false;
+      if (btnReRecord) btnReRecord.disabled = false;
       if (btnDiscard) btnDiscard.disabled = false;
-      if (meshStatus) meshStatus.textContent = `Voice Memo: Attached (${AppState.voice.durationSeconds.toFixed(1)}s)`;
+      if (meshStatus) meshStatus.textContent = `Voice: Attached (${AppState.voice.durationSeconds.toFixed(1)}s)`;
     } else {
       if (banner) banner.classList.add('hidden');
       if (btnPlay) btnPlay.disabled = true;
+      if (btnReRecord) btnReRecord.disabled = true;
       if (btnDiscard) btnDiscard.disabled = true;
-      if (meshStatus) meshStatus.textContent = 'Voice Memo: None';
+      if (meshStatus) meshStatus.textContent = 'Voice: None';
     }
   }
 
@@ -684,7 +712,7 @@
         AppState.voice.analyser.getByteTimeDomainData(dataArray);
 
         ctx.lineWidth = 2.5;
-        ctx.strokeStyle = '#F43F5E'; // Tactical Rose
+        ctx.strokeStyle = '#F43F5E';
         ctx.beginPath();
 
         const sliceWidth = width / bufferLength;
@@ -693,18 +721,15 @@
         for (let i = 0; i < bufferLength; i++) {
           const v = dataArray[i] / 128.0;
           const y = (v * height) / 2;
-
           if (i === 0) ctx.moveTo(x, y);
           else ctx.lineTo(x, y);
-
           x += sliceWidth;
         }
 
         ctx.lineTo(width, height / 2);
         ctx.stroke();
       } else if (AppState.voice.blob) {
-        // Draw static recorded waveform preview
-        ctx.fillStyle = '#10B981'; // Emerald
+        ctx.fillStyle = '#10B981';
         const bars = 40;
         const barWidth = width / bars;
         for (let i = 0; i < bars; i++) {
@@ -728,23 +753,9 @@
     const btnMeshPlay = document.getElementById('btnMeshPlayActiveVoice');
     const btnBoost = document.getElementById('btnVoiceBoost');
 
-    if (btnPlay) {
-      btnPlay.addEventListener('click', () => {
-        toggleVoicePlayback();
-      });
-    }
-
-    if (btnMeshPlay) {
-      btnMeshPlay.addEventListener('click', () => {
-        toggleVoicePlayback();
-      });
-    }
-
-    if (btnBoost) {
-      btnBoost.addEventListener('click', () => {
-        cycleVoiceBoost();
-      });
-    }
+    if (btnPlay) btnPlay.addEventListener('click', toggleVoicePlayback);
+    if (btnMeshPlay) btnMeshPlay.addEventListener('click', toggleVoicePlayback);
+    if (btnBoost) btnBoost.addEventListener('click', cycleVoiceBoost);
 
     initReceiverPlaybackCanvas();
   }
@@ -774,14 +785,14 @@
     const placeholder = document.getElementById('receiverPlaybackPlaceholder');
 
     const hasAudio = !!packet.voiceDataUrl;
-    const durStr = packet.voiceDuration ? `${packet.voiceDuration.toFixed(1)}s` : '3.5s';
+    const durStr = packet.voiceDuration ? `${packet.voiceDuration.toFixed(1)}s` : '3.0s';
 
     if (badge) {
-      badge.textContent = hasAudio ? `VOICE MEMO (#${packet.messageId})` : `TTS DISPATCH (#${packet.messageId})`;
+      badge.textContent = hasAudio ? `VOICE MEMO (#${packet.messageId})` : `TTS AUDIO (#${packet.messageId})`;
       badge.className = 'text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold';
     }
 
-    const desc = `Distress Beacon #${packet.messageId} • ${packet.distressMeta.name} • "${packet.message}" • Duration: ${durStr}`;
+    const desc = `${packet.distressMeta.name} • "${packet.message}" • Time: ${packet.timeString || 'Recent'} • Duration: ${durStr}`;
     if (meta) meta.textContent = desc;
     if (meshMeta) meshMeta.textContent = desc;
 
@@ -803,7 +814,6 @@
     }
 
     if (packet.voiceDataUrl) {
-      // Play real audio memo recorded from sender with Web Audio Gain Boost
       try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         if (!AppState.player.audioCtx) {
@@ -836,16 +846,13 @@
           }
         };
 
-        audio.onended = () => {
-          stopVoicePlayback();
-        };
+        audio.onended = () => stopVoicePlayback();
 
         AppState.player.isPlaying = true;
         updatePlaybackButtonUI(true);
         await audio.play();
 
       } catch (err) {
-        console.warn('Web Audio player fallback to standard HTML5 audio:', err);
         const audio = new Audio(packet.voiceDataUrl);
         AppState.player.audioElement = audio;
         audio.onended = () => stopVoicePlayback();
@@ -854,7 +861,6 @@
         audio.play();
       }
     } else {
-      // Fallback to SpeechSynthesis tactical voice announcement
       playTacticalTts(packet);
     }
   }
@@ -892,10 +898,9 @@
     if (!('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
 
-    const text = `Emergency Alert. Distress classification: ${packet.distressMeta.name}. Message: ${packet.message}. Distance: ${calculateDistance(AppState.currentLat, AppState.currentLon, packet.latitude, packet.longitude)}.`;
+    const text = `Emergency Alert. ${packet.distressMeta.name}. Message: ${packet.message}. Coordinates: Latitude ${packet.latitude}, Longitude ${packet.longitude}.`;
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.05;
-    utterance.pitch = 0.95;
 
     AppState.player.isPlaying = true;
     updatePlaybackButtonUI(true);
@@ -1065,7 +1070,7 @@
 
       for (let c = 0; c < rowData.length; c++) {
         const val = rowData[c];
-        if (val < 40) ctx.fillStyle = '#060911';
+        if (val < 40) ctx.fillStyle = '#050811';
         else if (val < 90) ctx.fillStyle = '#1E293B';
         else if (val < 140) ctx.fillStyle = '#0284C7';
         else if (val < 190) ctx.fillStyle = '#06B6D4';
@@ -1078,7 +1083,7 @@
   }
 
   /* -------------------------------------------------------------------------- */
-  /*                     LIVE SOS EMERGENCY FEED RENDERER                       */
+  /*           MULTI-SENDER LIVE FEED & BIDIRECTIONAL ACK DISPATCH              */
   /* -------------------------------------------------------------------------- */
 
   function renderEmergencyFeeds() {
@@ -1088,10 +1093,10 @@
     const buildFeedHtml = () => {
       if (AppState.receivedPackets.length === 0) {
         return `
-          <div class="p-6 text-center border border-dashed border-tactical-border rounded-lg bg-tactical-950/50 text-slate-500 font-mono text-xs">
-            <i data-lucide="shield-check" class="w-7 h-7 mx-auto mb-2 text-slate-600"></i>
+          <div class="p-6 text-center border border-dashed border-tactical-border rounded-xl bg-tactical-950/50 text-slate-500 font-mono text-xs">
+            <i data-lucide="shield-check" class="w-8 h-8 mx-auto mb-2 text-slate-600"></i>
             No active distress beacons received.<br>
-            Acoustic listener standing by on carrier frequencies.
+            Acoustic listener standing by across all channels.
           </div>
         `;
       }
@@ -1102,52 +1107,70 @@
         const timeStr = formatRelativeTime(pkt.timestamp);
 
         return `
-          <div class="p-3.5 rounded-xl border ${meta.bgClass} bg-tactical-900/90 shadow-md transition-all hover:border-slate-500 relative overflow-hidden group">
+          <div class="p-4 rounded-2xl border ${meta.bgClass} bg-tactical-900/95 shadow-lg transition-all hover:border-slate-500 relative overflow-hidden" id="card_${pkt.messageId}">
             
+            <!-- Top Line: Disaster Badge, ID, Time -->
             <div class="flex items-center justify-between mb-2">
               <div class="flex items-center gap-2">
-                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${meta.badgeClass}">
+                <span class="px-2.5 py-0.5 rounded-lg text-xs font-mono font-extrabold uppercase ${meta.badgeClass} flex items-center gap-1.5 shadow-sm">
+                  <i data-lucide="${meta.icon}" class="w-3.5 h-3.5"></i>
                   ${meta.name}
                 </span>
                 <span class="text-xs font-mono text-slate-400 font-bold">#${pkt.messageId}</span>
               </div>
-              <span class="text-[10px] font-mono text-slate-400">${timeStr}</span>
+              <div class="text-[11px] font-mono text-slate-400 flex items-center gap-1.5">
+                <i data-lucide="clock" class="w-3 h-3 text-slate-500"></i>
+                <span>${pkt.timeString || timeStr}</span>
+              </div>
             </div>
 
-            <div class="text-sm font-mono font-bold text-white mb-2 tracking-wide flex items-center justify-between">
+            <!-- Message & Voice Indicator -->
+            <div class="text-sm font-mono font-bold text-white mb-2.5 tracking-wide flex items-center justify-between">
               <span>"${pkt.message}"</span>
               ${pkt.hasVoice ? `
-                <span class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[10px] flex items-center gap-1 font-bold">
-                  <i data-lucide="mic" class="w-3 h-3"></i> VOICE SOS
+                <span class="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] flex items-center gap-1 font-bold">
+                  <i data-lucide="mic" class="w-3 h-3"></i> VOICE ATTACHED
                 </span>
               ` : ''}
             </div>
 
-            <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-slate-400 border-t border-tactical-border/50 pt-2">
-              <div class="flex items-center gap-3">
-                <span class="flex items-center gap-1 text-cyan-400">
-                  <i data-lucide="navigation" class="w-3 h-3"></i>
-                  ${distStr}
-                </span>
-                <span class="flex items-center gap-1 text-amber-400">
-                  <i data-lucide="git-fork" class="w-3 h-3"></i>
-                  Hops: ${pkt.ttl}
-                </span>
-                <span class="text-emerald-400 flex items-center gap-1">
-                  <i data-lucide="check-circle" class="w-3 h-3"></i>
-                  ${pkt.crcHex}
-                </span>
+            <!-- Location & Telemetry Bar -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono bg-tactical-950 p-2.5 rounded-xl border border-tactical-border/60 mb-3 text-slate-300">
+              <div>
+                <span class="text-slate-500 block text-[9px]">EXACT COORDS</span>
+                <span class="text-cyan-400 font-bold">${pkt.latitude.toFixed(5)}, ${pkt.longitude.toFixed(5)}</span>
+              </div>
+              <div>
+                <span class="text-slate-500 block text-[9px]">DISTANCE FROM HQ</span>
+                <span class="text-white font-bold">${distStr}</span>
+              </div>
+              <div>
+                <span class="text-slate-500 block text-[9px]">MESH HOPS (TTL)</span>
+                <span class="text-amber-400 font-bold">${pkt.ttl} Left</span>
+              </div>
+              <div>
+                <span class="text-slate-500 block text-[9px]">CRC-16 INTEGRITY</span>
+                <span class="text-emerald-400 font-bold">${pkt.crcHex} ✓</span>
+              </div>
+            </div>
+
+            <!-- Action Buttons: Listen Voice, Send ACK, Clear -->
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-tactical-border/50">
+              <div class="flex items-center gap-2">
+                <button type="button" class="btn-play-voice-card text-xs px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-mono font-bold transition-all flex items-center gap-1.5 shadow-md shadow-rose-950/40" data-msgid="${pkt.messageId}">
+                  <i data-lucide="play" class="w-3.5 h-3.5"></i> Play Voice SOS
+                </button>
+                <button type="button" class="btn-send-ack text-xs px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold transition-all flex items-center gap-1.5 shadow-md shadow-emerald-950/40" data-msgid="${pkt.messageId}">
+                  <i data-lucide="check-check" class="w-3.5 h-3.5"></i> Send ACK
+                </button>
               </div>
 
               <div class="flex items-center gap-1.5">
-                <button type="button" class="btn-play-voice-card text-[10px] px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-mono font-bold transition-colors flex items-center gap-1" data-msgid="${pkt.messageId}">
-                  <i data-lucide="play" class="w-3 h-3"></i> Play Voice
+                <button type="button" class="btn-focus-map text-[11px] px-2.5 py-1 rounded-lg bg-cyan-950 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-900 font-mono transition-colors" data-lat="${pkt.latitude}" data-lon="${pkt.longitude}">
+                  Focus Map
                 </button>
-                <button type="button" class="btn-inspect-hex text-[10px] px-2 py-1 rounded bg-tactical-800 hover:bg-tactical-700 text-slate-300 font-mono transition-colors" data-msgid="${pkt.messageId}">
-                  Hex
-                </button>
-                <button type="button" class="btn-focus-map text-[10px] px-2 py-1 rounded bg-cyan-950 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-900 font-mono transition-colors" data-lat="${pkt.latitude}" data-lon="${pkt.longitude}">
-                  Map
+                <button type="button" class="btn-clear-single-beacon text-[11px] px-2.5 py-1 rounded-lg bg-tactical-800 hover:bg-tactical-700 text-slate-300 font-mono transition-colors" data-msgid="${pkt.messageId}">
+                  Clear
                 </button>
               </div>
             </div>
@@ -1163,7 +1186,7 @@
 
     if (window.lucide) window.lucide.createIcons();
 
-    // Attach Event Handlers for dynamically rendered feed cards
+    // Attach Event Listeners to feed buttons
     document.querySelectorAll('.btn-play-voice-card').forEach(btn => {
       btn.addEventListener('click', () => {
         const msgId = parseInt(btn.dataset.msgid, 10);
@@ -1175,11 +1198,19 @@
       });
     });
 
-    document.querySelectorAll('.btn-inspect-hex').forEach(btn => {
+    document.querySelectorAll('.btn-send-ack').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const msgId = parseInt(btn.dataset.msgid, 10);
+        await dispatchRescueAck(msgId);
+        btn.textContent = 'ACK Sent ✓';
+        btn.className = 'text-xs px-3 py-1.5 rounded-xl bg-emerald-900 text-emerald-300 border border-emerald-500/40 font-mono font-bold';
+      });
+    });
+
+    document.querySelectorAll('.btn-clear-single-beacon').forEach(btn => {
       btn.addEventListener('click', () => {
         const msgId = parseInt(btn.dataset.msgid, 10);
-        const packet = AppState.receivedPackets.find(p => p.messageId === msgId);
-        if (packet) showHexModal(packet);
+        clearSingleBeacon(msgId);
       });
     });
 
@@ -1193,25 +1224,122 @@
     });
   }
 
+  function clearSingleBeacon(messageId) {
+    AppState.receivedPackets = AppState.receivedPackets.filter(p => p.messageId !== messageId);
+    
+    // Remove marker from maps
+    if (AppState.receiverMap && AppState.distressMarkers.has(`rx_${messageId}`)) {
+      AppState.receiverMap.removeLayer(AppState.distressMarkers.get(`rx_${messageId}`));
+      AppState.distressMarkers.delete(`rx_${messageId}`);
+    }
+    if (AppState.meshMap && AppState.distressMarkers.has(`mesh_${messageId}`)) {
+      AppState.meshMap.removeLayer(AppState.distressMarkers.get(`mesh_${messageId}`));
+      AppState.distressMarkers.delete(`mesh_${messageId}`);
+    }
+
+    renderEmergencyFeeds();
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /*              BIDIRECTIONAL ACKNOWLEDGMENT (ACK) ENGINE                     */
+  /* -------------------------------------------------------------------------- */
+
+  async function dispatchRescueAck(targetMessageId) {
+    console.log(`[SilentBridge ACK] Dispatching rescue ACK for Message #${targetMessageId}`);
+    
+    const ackPacket = PacketEngine.createAckPacket(targetMessageId, 'RESCUE EN ROUTE');
+
+    try {
+      // 1. Acoustic transmission of ACK packet
+      if (AppState.audioModem) {
+        await AppState.audioModem.transmitPacket(ackPacket);
+      }
+
+      // 2. Cross-tab BroadcastChannel sync
+      if (AppState.syncChannel) {
+        AppState.syncChannel.postMessage({
+          type: 'ACK_BROADCAST',
+          targetMessageId: targetMessageId,
+          timestamp: Date.now()
+        });
+      }
+
+      AppState.stats.ackCount++;
+      const ackCountEl = document.getElementById('statAckCount');
+      if (ackCountEl) ackCountEl.textContent = AppState.stats.ackCount;
+
+    } catch (e) {
+      console.warn('ACK dispatch note:', e);
+    }
+  }
+
+  function handleIncomingAck(targetMessageId) {
+    console.log(`[SilentBridge] ACK received for #${targetMessageId}`);
+
+    const banner = document.getElementById('senderAckBanner');
+    const timeEl = document.getElementById('ackTimestamp');
+    const msgEl = document.getElementById('ackMessageText');
+
+    if (banner) {
+      banner.classList.remove('hidden');
+      if (timeEl) timeEl.textContent = new Date().toTimeString().split(' ')[0];
+      if (msgEl) msgEl.textContent = `Base Station Acknowledged Distress Beacon #${targetMessageId}! Help is En Route.`;
+    }
+
+    AppState.stats.ackCount++;
+    const ackCountEl = document.getElementById('statAckCount');
+    if (ackCountEl) ackCountEl.textContent = AppState.stats.ackCount;
+
+    playAckSuccessChime();
+  }
+
+  function playAckSuccessChime() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+      osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
+      osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2); // G5
+      osc.frequency.setValueAtTime(1046.50, ctx.currentTime + 0.3); // C6
+
+      gain.gain.setValueAtTime(0.001, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.05);
+      gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 0.55);
+    } catch (e) {}
+  }
+
   /* -------------------------------------------------------------------------- */
   /*                    PACKET RECEIVED & MESH RELAY ENGINE                     */
   /* -------------------------------------------------------------------------- */
 
   function handleIncomingPacket(packet, voiceAttachment = null) {
-    console.log('[SilentBridge] Processing incoming packet:', packet);
+    // Check if this is an ACK packet
+    if (packet.isAck || packet.distressType === 15) {
+      handleIncomingAck(packet.messageId);
+      return;
+    }
 
     if (AppState.seenPacketIds.has(packet.messageId)) {
-      console.log(`[SilentBridge Mesh] Dropping duplicate #${packet.messageId}`);
       return;
     }
 
     AppState.seenPacketIds.add(packet.messageId);
 
-    // Attach voice memo if provided
     if (voiceAttachment) {
       packet.hasVoice = true;
       packet.voiceDataUrl = voiceAttachment.dataUrl || voiceAttachment.voiceDataUrl;
-      packet.voiceDuration = voiceAttachment.duration || voiceAttachment.voiceDuration || 3.5;
+      packet.voiceDuration = voiceAttachment.duration || voiceAttachment.voiceDuration || 3.0;
     } else {
       packet.hasVoice = false;
     }
@@ -1241,9 +1369,7 @@
         try {
           await AppState.audioModem.transmitPacket(relayData.packet);
           AppState.stats.relayCount++;
-        } catch (err) {
-          console.warn('[SilentBridge Mesh] Relay transmission error:', err);
-        }
+        } catch (err) {}
       }, jitterMs);
     }
   }
@@ -1279,7 +1405,7 @@
   function initCrossTabSync() {
     try {
       if ('BroadcastChannel' in window) {
-        AppState.syncChannel = new BroadcastChannel('silentbridge_mesh_sync');
+        AppState.syncChannel = new BroadcastChannel('silentbridge_disaster_sync');
         AppState.syncChannel.onmessage = (event) => {
           const data = event.data;
           if (data && data.type === 'DISTRESS_BROADCAST') {
@@ -1291,12 +1417,12 @@
                 duration: data.voiceDuration
               });
             }
+          } else if (data && data.type === 'ACK_BROADCAST') {
+            handleIncomingAck(data.targetMessageId);
           }
         };
       }
-    } catch (e) {
-      console.warn('BroadcastChannel sync init failed:', e);
-    }
+    } catch (e) {}
   }
 
   function broadcastDistressCrossTab(packetBytes, voiceDataUrl, voiceDuration) {
@@ -1312,28 +1438,7 @@
   }
 
   /* -------------------------------------------------------------------------- */
-  /*                          HEX MODAL INSPECTOR                               */
-  /* -------------------------------------------------------------------------- */
-
-  function showHexModal(packet) {
-    const modal = document.getElementById('hexModal');
-    if (!modal) return;
-
-    document.getElementById('modalHexDump').textContent = packet.rawHex || PacketEngine.toHex(packet.rawBytes);
-    document.getElementById('modalSync').textContent = '0x' + packet.syncByte.toString(16).toUpperCase().padStart(2, '0');
-    document.getElementById('modalMsgId').textContent = `#${packet.messageId} (0x${packet.messageId.toString(16).toUpperCase()})`;
-    document.getElementById('modalType').textContent = `${packet.distressType} (${packet.distressMeta.name})`;
-    document.getElementById('modalTtl').textContent = `${packet.ttl} Hops`;
-    document.getElementById('modalLat').textContent = packet.latitude.toFixed(6);
-    document.getElementById('modalLon').textContent = packet.longitude.toFixed(6);
-    document.getElementById('modalMsg').textContent = `"${packet.message}"`;
-    document.getElementById('modalCrc').textContent = `${packet.crcHex} (${packet.crcValid ? 'VALID' : 'CORRUPTED'})`;
-
-    modal.showModal();
-  }
-
-  /* -------------------------------------------------------------------------- */
-  /*                            TRANSMIT SOS HANDLER                            */
+  /*                 TRANSMIT SOS HANDLER & SENDER AUTO-CLEAR                   */
   /* -------------------------------------------------------------------------- */
 
   async function handleBroadcastSos(source) {
@@ -1342,29 +1447,30 @@
     const latInput = isSenderView ? document.getElementById('senderInputLat') : document.getElementById('meshInputLat');
     const lonInput = isSenderView ? document.getElementById('senderInputLon') : document.getElementById('meshInputLon');
     const msgInput = isSenderView ? document.getElementById('senderInputMessage') : document.getElementById('meshInputMessage');
-    const ttlSelect = isSenderView ? document.getElementById('senderSelectTtl') : document.getElementById('selectTtl');
 
     const lat = parseFloat(latInput ? latInput.value : AppState.currentLat) || AppState.currentLat;
     const lon = parseFloat(lonInput ? lonInput.value : AppState.currentLon) || AppState.currentLon;
     const msg = msgInput ? msgInput.value : 'NEED RESCUE ASAP';
-    const ttl = ttlSelect ? parseInt(ttlSelect.value, 10) : 3;
+    const messageId = PacketEngine.generateMessageId();
+    AppState.lastSentMessageId = messageId;
 
     const packetBytes = PacketEngine.createPacket({
+      messageId: messageId,
       distressType: AppState.activeDistressType,
       latitude: lat,
       longitude: lon,
       message: msg,
-      ttl: ttl
+      ttl: 3
     });
 
     const voiceDataUrl = AppState.voice.dataUrl;
     const voiceDuration = AppState.voice.durationSeconds;
 
     try {
-      // 1. Physical Acoustic Transmission (emits BFSK tone sequence)
+      // 1. Acoustic Modulation Transmission
       await AppState.audioModem.transmitPacket(packetBytes);
 
-      // 2. Cross-tab synchronization
+      // 2. Cross-tab sync
       broadcastDistressCrossTab(packetBytes, voiceDataUrl, voiceDuration);
 
       // 3. Add to local feed
@@ -1375,6 +1481,15 @@
           duration: voiceDuration
         });
       }
+
+      // 4. Clear sender input box and voice recording after successful dispatch
+      if (isSenderView) {
+        if (msgInput) msgInput.value = '';
+        const charCounter = document.getElementById('senderCharCounter');
+        if (charCounter) charCounter.textContent = '0 / 17 Bytes';
+        discardVoiceRecording();
+      }
+
     } catch (err) {
       alert(`Transmission Notice: ${err.message}`);
     }
@@ -1393,14 +1508,17 @@
     initGpsTracking();
     initCrossTabSync();
 
+    // Start Live Clock
+    setInterval(updateClock, 1000);
+    updateClock();
+
     // Instantiate Audio Modem Engine
     AppState.audioModem = new AudioModem({ mode: 'ultrasonic' });
 
-    // Audio Modem Event Callbacks
     AppState.audioModem.onTxStart = () => {
       ['senderBroadcastBtnText', 'meshBroadcastBtnText'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.textContent = 'TRANSMITTING BFSK TONES...';
+        if (el) el.textContent = 'TRANSMITTING ACOUSTIC BFSK...';
       });
     };
 
@@ -1461,9 +1579,6 @@
       const floorStr = `${noiseFloor.toFixed(1)} dB`;
       const freqStr = `${Math.round(peakFreq).toLocaleString()} Hz`;
 
-      const statSnr = document.getElementById('statSnr');
-      if (statSnr) statSnr.textContent = snrStr;
-
       const rSnr = document.getElementById('receiverHudSnr');
       const rFloor = document.getElementById('receiverHudNoiseFloor');
       const rFreq = document.getElementById('receiverHudPeakFreq');
@@ -1481,7 +1596,7 @@
       if (mFreq) mFreq.textContent = freqStr;
     };
 
-    // Auto-start listener on first user click gesture
+    // Auto-start listener on first click
     const startAudioOnce = async () => {
       try {
         await AppState.audioModem.startListening();
@@ -1518,7 +1633,7 @@
   }
 
   /* -------------------------------------------------------------------------- */
-  /*                            EVENT LISTENERS SETUP                           */
+  /*                            UI EVENT LISTENERS SETUP                        */
   /* -------------------------------------------------------------------------- */
 
   function setupUIEventListeners() {
@@ -1543,7 +1658,7 @@
             await AppState.audioModem.startListening();
             updateAudioPowerButton(true);
           } catch (e) {
-            alert('Microphone permission is required to listen for acoustic SOS packets.');
+            alert('Microphone permission is required.');
           }
         }
       });
@@ -1556,18 +1671,18 @@
     if (btnUltra && btnAudible) {
       btnUltra.addEventListener('click', () => {
         AppState.audioModem.setFrequencyMode('ultrasonic');
-        btnUltra.className = 'px-2 py-1 rounded-md font-semibold transition-all flex items-center gap-1.5 bg-cyan-500 text-slate-950 shadow-sm';
-        btnAudible.className = 'px-2 py-1 rounded-md font-semibold transition-all text-slate-400 hover:text-white flex items-center gap-1.5';
+        btnUltra.className = 'px-2.5 py-1 rounded-md font-semibold transition-all flex items-center gap-1.5 bg-cyan-500 text-slate-950 shadow-sm';
+        btnAudible.className = 'px-2.5 py-1 rounded-md font-semibold transition-all text-slate-400 hover:text-white flex items-center gap-1.5';
       });
 
       btnAudible.addEventListener('click', () => {
         AppState.audioModem.setFrequencyMode('audible');
-        btnAudible.className = 'px-2 py-1 rounded-md font-semibold transition-all flex items-center gap-1.5 bg-cyan-500 text-slate-950 shadow-sm';
-        btnUltra.className = 'px-2 py-1 rounded-md font-semibold transition-all text-slate-400 hover:text-white flex items-center gap-1.5';
+        btnAudible.className = 'px-2.5 py-1 rounded-md font-semibold transition-all flex items-center gap-1.5 bg-cyan-500 text-slate-950 shadow-sm';
+        btnUltra.className = 'px-2.5 py-1 rounded-md font-semibold transition-all text-slate-400 hover:text-white flex items-center gap-1.5';
       });
     }
 
-    // 4. Distress Type Selectors
+    // 4. 6 Disaster Type Buttons
     document.querySelectorAll('.distress-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const typeId = parseInt(btn.dataset.distress, 10);
@@ -1583,80 +1698,71 @@
         });
 
         const sPri = document.getElementById('senderDistressPriority');
-        const mPri = document.getElementById('meshDistressPriority');
         if (sPri) {
           sPri.textContent = `${meta.priority} // PRIORITY ${typeId}`;
           sPri.style.color = meta.color;
         }
-        if (mPri) {
-          mPri.textContent = meta.priority;
-          mPri.style.color = meta.color;
-        }
       });
     });
 
-    // 5. GPS Acquisition Triggers
+    // 5. GPS Triggers
     const btnSenderGps = document.getElementById('btnSenderGps');
-    const btnMeshGps = document.getElementById('btnMeshGps');
     if (btnSenderGps) btnSenderGps.addEventListener('click', acquireHighAccuracyGps);
-    if (btnMeshGps) btnMeshGps.addEventListener('click', acquireHighAccuracyGps);
 
-    // 6. Location Presets
+    // 6. Presets
     document.querySelectorAll('.btn-preset-loc').forEach(btn => {
       btn.addEventListener('click', () => {
         const lat = parseFloat(btn.dataset.lat);
         const lon = parseFloat(btn.dataset.lon);
         AppState.currentLat = lat;
         AppState.currentLon = lon;
-
-        ['senderInputLat', 'meshInputLat'].forEach(id => {
-          const el = document.getElementById(id);
-          if (el) el.value = lat.toFixed(6);
-        });
-        ['senderInputLon', 'meshInputLon'].forEach(id => {
-          const el = document.getElementById(id);
-          if (el) el.value = lon.toFixed(6);
-        });
-
-        updateMapPositions(lat, lon, 5.0);
+        updateCoordinatesUI(lat, lon, 5.0);
       });
     });
 
-    // 7. Message Presets
     document.querySelectorAll('.btn-preset-msg').forEach(btn => {
       btn.addEventListener('click', () => {
         const msg = btn.dataset.msg;
-        ['senderInputMessage', 'meshInputMessage'].forEach(id => {
-          const el = document.getElementById(id);
-          if (el) el.value = msg;
-        });
+        const input = document.getElementById('senderInputMessage');
+        if (input) {
+          input.value = msg;
+          input.dispatchEvent(new Event('input'));
+        }
       });
     });
 
-    // 8. Broadcast Buttons
+    // Message Input Char Counter
+    const senderMsgInput = document.getElementById('senderInputMessage');
+    if (senderMsgInput) {
+      senderMsgInput.addEventListener('input', () => {
+        const len = senderMsgInput.value.length;
+        const counter = document.getElementById('senderCharCounter');
+        if (counter) counter.textContent = `${len} / 17 Bytes`;
+      });
+    }
+
+    // 7. Master Broadcast Buttons
     const btnSenderBroadcast = document.getElementById('btnSenderBroadcastSos');
     const btnMeshBroadcast = document.getElementById('btnMeshBroadcastSos');
 
-    if (btnSenderBroadcast) {
-      btnSenderBroadcast.addEventListener('click', () => handleBroadcastSos('sender'));
-    }
-    if (btnMeshBroadcast) {
-      btnMeshBroadcast.addEventListener('click', () => handleBroadcastSos('mesh'));
-    }
+    if (btnSenderBroadcast) btnSenderBroadcast.addEventListener('click', () => handleBroadcastSos('sender'));
+    if (btnMeshBroadcast) btnMeshBroadcast.addEventListener('click', () => handleBroadcastSos('mesh'));
 
-    // 9. Simulator Test Bench
+    // 8. Simulator Multi-Sender Test Bench
     const btnSim = document.getElementById('btnSimulatePacket');
     const btnLoop = document.getElementById('btnLoopbackTest');
 
     if (btnSim) {
       btnSim.addEventListener('click', () => {
-        const randomOffsets = [
-          { dLat: 0.008, dLon: -0.005, msg: 'TRAPPED IN BASEMENT', type: 2 },
-          { dLat: -0.012, dLon: 0.009, msg: 'BRUSH FIRE SPREADING', type: 3 },
-          { dLat: 0.015, dLon: 0.012, msg: 'MEDIC NEEDED FL 4', type: 1 },
-          { dLat: -0.006, dLon: -0.008, msg: 'SHELTER 12 SURVIVORS', type: 4 }
+        const randomSenders = [
+          { dLat: 0.008, dLon: -0.005, msg: 'TRAPPED BASEMENT', type: 2 },
+          { dLat: -0.012, dLon: 0.009, msg: 'FLOOD RISING FL2', type: 4 },
+          { dLat: 0.015, dLon: 0.012, msg: 'MEDIC NEEDED', type: 1 },
+          { dLat: -0.006, dLon: -0.008, msg: 'LANDSLIDE COLLAPSE', type: 5 },
+          { dLat: 0.004, dLon: 0.003, msg: 'FIRE IN 3RD FLOOR', type: 3 },
+          { dLat: -0.009, dLon: 0.002, msg: 'SHELTER 20 PEOPLE', type: 6 }
         ];
-        const sample = randomOffsets[Math.floor(Math.random() * randomOffsets.length)];
+        const sample = randomSenders[Math.floor(Math.random() * randomSenders.length)];
         const simPacket = PacketEngine.createPacket({
           distressType: sample.type,
           latitude: AppState.currentLat + sample.dLat,
@@ -1673,12 +1779,10 @@
     }
 
     if (btnLoop) {
-      btnLoop.addEventListener('click', () => {
-        handleBroadcastSos('mesh');
-      });
+      btnLoop.addEventListener('click', () => handleBroadcastSos('mesh'));
     }
 
-    // 10. Clear Feed Buttons
+    // 9. Clear All Feeds
     const btnRxClear = document.getElementById('btnReceiverClearFeed');
     const btnMeshClear = document.getElementById('btnMeshClearFeed');
 
@@ -1695,6 +1799,15 @@
     if (btnRxClear) btnRxClear.addEventListener('click', clearAllFeeds);
     if (btnMeshClear) btnMeshClear.addEventListener('click', clearAllFeeds);
 
+    // 10. Dismiss ACK Banner
+    const btnDismissAck = document.getElementById('btnDismissAck');
+    if (btnDismissAck) {
+      btnDismissAck.addEventListener('click', () => {
+        const banner = document.getElementById('senderAckBanner');
+        if (banner) banner.classList.add('hidden');
+      });
+    }
+
     // 11. Modals
     const hexModal = document.getElementById('hexModal');
     const btnCloseHex = document.getElementById('btnCloseHexModal');
@@ -1707,6 +1820,5 @@
     if (btnCloseHelp) btnCloseHelp.addEventListener('click', () => helpModal.close());
   }
 
-  // Document entry point
   document.addEventListener('DOMContentLoaded', initApp);
 })();
