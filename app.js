@@ -200,6 +200,7 @@
 
     try {
       sessionStorage.setItem('silentbridge_rescue_unlocked', 'true');
+      localStorage.setItem('silentbridge_rescue_unlocked', 'true');
     } catch (e) {}
 
     renderEmergencyFeeds();
@@ -224,6 +225,7 @@
 
     try {
       sessionStorage.removeItem('silentbridge_rescue_unlocked');
+      localStorage.removeItem('silentbridge_rescue_unlocked');
     } catch (e) {}
 
     if (window.lucide) window.lucide.createIcons();
@@ -231,7 +233,7 @@
 
   function initRescueAuth() {
     try {
-      if (sessionStorage.getItem('silentbridge_rescue_unlocked') === 'true') {
+      if (sessionStorage.getItem('silentbridge_rescue_unlocked') === 'true' || localStorage.getItem('silentbridge_rescue_unlocked') === 'true') {
         unlockRescueDashboard();
       }
     } catch (e) {}
@@ -1578,14 +1580,14 @@
   /* -------------------------------------------------------------------------- */
 
   const SafetyPipeline = {
-    // 1. Gesture Hold Configuration & State (1.5s Threshold)
+    // 1. Gesture Hold Configuration & State (Snappy 0.6s Threshold)
     gesture: {
       active: false,
       cameraStream: null,
       handsDetector: null,
       currentDetectedGesture: null,
       holdStartTime: null,
-      holdDurationMs: 1500, // 1.5s Threshold
+      holdDurationMs: 600, // 0.6s Snappy Threshold
       isHolding: false,
       holdAnimFrameRef: null
     },
@@ -1598,7 +1600,7 @@
       }
     },
 
-    // 1. GESTURE HOLD (1.5s Threshold)
+    // 1. GESTURE HOLD (0.6s Threshold)
     onGestureDetected(gestureName, rawLandmarks = null) {
       if (!gestureName) {
         if (this.gesture.isHolding || this.gesture.holdStartTime) {
@@ -1633,7 +1635,7 @@
         V_SIGN: '✌️ V-SIGN (EVAC / RESCUE SOS)'
       };
 
-      if (label) label.textContent = `HOLDING ${gestureTitles[gestureName] || gestureName} (1.5s)...`;
+      if (label) label.textContent = `CONFIRMING ${gestureTitles[gestureName] || gestureName}...`;
 
       const checkProgress = () => {
         if (!this.gesture.isHolding || !this.gesture.holdStartTime) return;
