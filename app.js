@@ -1503,16 +1503,331 @@
   }
 
   /* -------------------------------------------------------------------------- */
-  /*                 ⚡ 1-TAP INSTANT PANIC SOS HANDLER                         */
+  /*                  SAFETY DISPATCH PIPELINE & GESTURE ENGINE                 */
   /* -------------------------------------------------------------------------- */
 
-  async function handleOneTapPanicSos() {
+  const SafetyPipeline = {
+    // 1. Gesture Hold Configuration & State (1.5s Threshold)
+    gesture: {
+      active: false,
+      cameraStream: null,
+      handsDetector: null,
+      currentDetectedGesture: null,
+      holdStartTime: null,
+      holdDurationMs: 1500, // Exact 1.5s Threshold
+      isHolding: false,
+      holdAnimFrameRef: null
+    },
+
+    // 2. 5-Second Cancel / Undo Overlay State
+    cancelOverlay: {
+      isPending: false,
+      totalDurationMs: 5000,
+      remainingMs: 5000,
+      timerIntervalRef: null,
+      pendingPayload: null
+    },
+
+    // 3. 60-Second Anti-Spam Cooldown State
+    cooldown: {
+      isActive: false,
+      remainingSeconds: 60,
+      timerIntervalRef: null
+    },
+
+    // Clean up all timer handles to prevent memory leaks or stuck countdown states
+    cleanupAllTimers() {
+      if (this.gesture.holdAnimFrameRef) {
+        cancelAnimationFrame(this.gesture.holdAnimFrameRef);
+        this.gesture.holdAnimFrameRef = null;
+      }
+      if (this.cancelOverlay.timerIntervalRef) {
+        clearInterval(this.cancelOverlay.timerIntervalRef);
+        this.cancelOverlay.timerIntervalRef = null;
+      }
+      if (this.cooldown.timerIntervalRef) {
+        clearInterval(this.cooldown.timerIntervalRef);
+        this.cooldown.timerIntervalRef = null;
+      }
+    },
+
+    // 1. GESTURE HOLD (1.5s Threshold)
+    onGestureDetected(gestureName, rawLandmarks = null) {
+      if (this.cooldown.isActive || this.cancelOverlay.isPending) {
+        this.resetGestureHold();
+        return;
+      }
+
+      // If hand moved, changed gesture, or left frame -> IMMEDIATELY RESET
+      if (!gestureName) {
+        if (this.gesture.isHolding || this.gesture.holdStartTime) {
+          this.resetGestureHold();
+        }
+        this.updateGestureBadge(null);
+        return;
+      }
+
+      // If new gesture started
+      if (this.gesture.currentDetectedGesture !== gestureName) {
+        this.resetGestureHold();
+        this.gesture.currentDetectedGesture = gestureName;
+        this.gesture.holdStartTime = Date.now();
+        this.gesture.isHolding = true;
+        this.updateGestureBadge(gestureName);
+        this.startHoldCountdown(gestureName);
+      }
+    },
+
+    startHoldCountdown(gestureName) {
+      const hud = document.getElementById('gestureHoldHud');
+      const progressBar = document.getElementById('gestureHoldProgressBar');
+      const percentText = document.getElementById('gestureHoldPercentText');
+      const label = document.getElementById('gestureHoldLabel');
+
+      if (hud) hud.classList.remove('hidden');
+
+      const gestureTitles = {
+        FIST: '✊ CLOSED FIST (PANIC SOS)',
+        POINTING: '☝️ POINTING (MEDICAL SOS)',
+        V_SIGN: '✌️ V-SIGN (EVAC / RESCUE SOS)'
+      };
+
+      if (label) label.textContent = `HOLDING ${gestureTitles[gestureName] || gestureName} (1.5s)...`;
+
+      const checkProgress = () => {
+        if (!this.gesture.isHolding || !this.gesture.holdStartTime) return;
+
+        const elapsed = Date.now() - this.gesture.holdStartTime;
+        const progress = Math.min(100, (elapsed / this.gesture.holdDurationMs) * 100);
+
+        if (progressBar) progressBar.style.width = `${progress}%`;
+        if (percentText) percentText.textContent = `${Math.round(progress)}%`;
+
+        if (elapsed >= this.gesture.holdDurationMs) {
+          // 1.5s Hold Complete! Trigger 5-Second Cancel Overlay
+          console.log(`[Safety Pipeline] 1.5s Hold Complete for gesture: ${gestureName}`);
+          this.resetGestureHold();
+          
+          const distressType = gestureName === 'FIST' ? 2 : (gestureName === 'POINTING' ? 1 : 4);
+          const defaultMsgs = {
+            FIST: 'GESTURE SOS: TRAPPED',
+            POINTING: 'GESTURE SOS: MEDIC',
+            V_SIGN: 'GESTURE SOS: EVAC'
+          };
+
+          this.initiateSafetyCancelOverlay({
+            source: 'gesture',
+            gestureName: gestureName,
+            distressType: distressType,
+            message: defaultMsgs[gestureName] || 'GESTURE SOS'
+          });
+          return;
+        }
+
+        this.gesture.holdAnimFrameRef = requestAnimationFrame(checkProgress);
+      };
+
+      this.gesture.holdAnimFrameRef = requestAnimationFrame(checkProgress);
+    },
+
+    resetGestureHold() {
+      this.gesture.isHolding = false;
+      this.gesture.holdStartTime = null;
+      this.gesture.currentDetectedGesture = null;
+
+      if (this.gesture.holdAnimFrameRef) {
+        cancelAnimationFrame(this.gesture.holdAnimFrameRef);
+        this.gesture.holdAnimFrameRef = null;
+      }
+
+      const hud = document.getElementById('gestureHoldHud');
+      const progressBar = document.getElementById('gestureHoldProgressBar');
+      const percentText = document.getElementById('gestureHoldPercentText');
+
+      if (hud) hud.classList.add('hidden');
+      if (progressBar) progressBar.style.width = '0%';
+      if (percentText) percentText.textContent = '0%';
+    },
+
+    updateGestureBadge(gestureName) {
+      const badge = document.getElementById('gestureDetectedBadge');
+      if (!badge) return;
+
+      if (!gestureName) {
+        badge.innerHTML = `
+          <span class="w-2 h-2 rounded-full bg-slate-500 animate-pulse"></span>
+          <span>Waiting for Hand Sign...</span>
+        `;
+        badge.className = 'text-[11px] font-mono px-2.5 py-1 rounded-lg bg-black/70 text-slate-300 border border-white/20 backdrop-blur-sm font-bold flex items-center gap-1.5';
+      } else if (gestureName === 'FIST') {
+        badge.innerHTML = `
+          <span class="w-2 h-2 rounded-full bg-red-400 animate-ping"></span>
+          <span class="text-rose-300">✊ CLOSED FIST DETECTED // HOLD 1.5s</span>
+        `;
+        badge.className = 'text-[11px] font-mono px-2.5 py-1 rounded-lg bg-red-950/80 text-rose-200 border border-red-500/50 backdrop-blur-sm font-bold flex items-center gap-1.5';
+      } else if (gestureName === 'POINTING') {
+        badge.innerHTML = `
+          <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+          <span class="text-amber-300">☝️ POINTING INDEX DETECTED // HOLD 1.5s</span>
+        `;
+        badge.className = 'text-[11px] font-mono px-2.5 py-1 rounded-lg bg-amber-950/80 text-amber-200 border border-amber-500/50 backdrop-blur-sm font-bold flex items-center gap-1.5';
+      } else if (gestureName === 'V_SIGN') {
+        badge.innerHTML = `
+          <span class="w-2 h-2 rounded-full bg-blue-400 animate-ping"></span>
+          <span class="text-blue-300">✌️ V-SIGN DETECTED // HOLD 1.5s</span>
+        `;
+        badge.className = 'text-[11px] font-mono px-2.5 py-1 rounded-lg bg-blue-950/80 text-blue-200 border border-blue-500/50 backdrop-blur-sm font-bold flex items-center gap-1.5';
+      }
+    },
+
+    // 2. 5-SECOND CANCEL / UNDO OVERLAY
+    initiateSafetyCancelOverlay(payload) {
+      if (this.cooldown.isActive) {
+        alert(`Transmission locked: Anti-Spam cooldown is active (${this.cooldown.remainingSeconds}s remaining).`);
+        return;
+      }
+
+      this.cancelOverlay.isPending = true;
+      this.cancelOverlay.pendingPayload = payload;
+      this.cancelOverlay.remainingMs = 5000;
+
+      const overlay = document.getElementById('dispatchCancelOverlay');
+      const numEl = document.getElementById('dispatchCountdownNumber');
+      const barEl = document.getElementById('dispatchCountdownProgressBar');
+      const subtitleEl = document.getElementById('dispatchCountdownSubtitle');
+
+      if (overlay) overlay.classList.remove('hidden');
+      if (numEl) numEl.textContent = '5';
+      if (barEl) barEl.style.width = '100%';
+      if (subtitleEl) {
+        subtitleEl.textContent = payload.source === 'gesture' 
+          ? `Gesture [${payload.gestureName}] held for 1.5s. Armed for acoustic dispatch. Click CANCEL to abort.`
+          : `Distress alert armed. Click CANCEL to abort transmission.`;
+      }
+
+      if (this.cancelOverlay.timerIntervalRef) {
+        clearInterval(this.cancelOverlay.timerIntervalRef);
+      }
+
+      const startTime = Date.now();
+      const totalMs = 5000;
+
+      this.cancelOverlay.timerIntervalRef = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const remainingMs = Math.max(0, totalMs - elapsed);
+        const remainingSeconds = Math.ceil(remainingMs / 1000);
+        const progressPercent = (remainingMs / totalMs) * 100;
+
+        if (numEl) numEl.textContent = remainingSeconds;
+        if (barEl) barEl.style.width = `${progressPercent}%`;
+
+        if (remainingMs <= 0) {
+          // Timer elapsed without cancellation! Execute automatic dispatch!
+          clearInterval(this.cancelOverlay.timerIntervalRef);
+          this.cancelOverlay.timerIntervalRef = null;
+          this.cancelOverlay.isPending = false;
+          if (overlay) overlay.classList.add('hidden');
+
+          this.executeDispatch(this.cancelOverlay.pendingPayload);
+        }
+      }, 50);
+    },
+
+    abortCancelOverlay() {
+      console.log('[Safety Pipeline] 🛑 User CANCELLED / UNDO Dispatch.');
+      if (this.cancelOverlay.timerIntervalRef) {
+        clearInterval(this.cancelOverlay.timerIntervalRef);
+        this.cancelOverlay.timerIntervalRef = null;
+      }
+      this.cancelOverlay.isPending = false;
+      this.cancelOverlay.pendingPayload = null;
+
+      const overlay = document.getElementById('dispatchCancelOverlay');
+      if (overlay) overlay.classList.add('hidden');
+
+      // Visual feedback
+      const trackingStatus = document.getElementById('senderTrackingStatusText');
+      if (trackingStatus) {
+        trackingStatus.innerHTML = `<span class="text-slate-400">Dispatch Aborted by User ✓ (Standby)</span>`;
+      }
+    },
+
+    // 3. DISPATCH EXECUTION & 60-SECOND ANTI-SPAM COOLDOWN
+    async executeDispatch(payload) {
+      console.log('[Safety Pipeline] 🚀 Transmitting verified emergency payload:', payload);
+
+      if (payload.source === 'panic' || payload.source === 'gesture') {
+        await executePanicSosDispatch(payload);
+      } else {
+        await executeRegularSosDispatch(payload);
+      }
+
+      // Enter 60-second cooldown immediately
+      this.startAntiSpamCooldown(60);
+    },
+
+    startAntiSpamCooldown(durationSeconds = 60) {
+      this.cooldown.isActive = true;
+      this.cooldown.remainingSeconds = durationSeconds;
+
+      const banner = document.getElementById('senderCooldownBanner');
+      const counter = document.getElementById('cooldownSecondsRemaining');
+      const btnPanic = document.getElementById('btnOneTapPanicSos');
+      const btnBroadcast = document.getElementById('btnSenderBroadcastSos');
+
+      if (banner) banner.classList.remove('hidden');
+      if (counter) counter.textContent = `${durationSeconds}s`;
+
+      // Lock buttons during 60s cooldown
+      if (btnPanic) {
+        btnPanic.disabled = true;
+        btnPanic.classList.add('opacity-50', 'pointer-events-none', 'grayscale');
+      }
+      if (btnBroadcast) {
+        btnBroadcast.disabled = true;
+        btnBroadcast.classList.add('opacity-50', 'pointer-events-none', 'grayscale');
+      }
+
+      if (this.cooldown.timerIntervalRef) {
+        clearInterval(this.cooldown.timerIntervalRef);
+      }
+
+      this.cooldown.timerIntervalRef = setInterval(() => {
+        this.cooldown.remainingSeconds--;
+
+        if (counter) counter.textContent = `${this.cooldown.remainingSeconds}s`;
+
+        if (this.cooldown.remainingSeconds <= 0) {
+          clearInterval(this.cooldown.timerIntervalRef);
+          this.cooldown.timerIntervalRef = null;
+          this.cooldown.isActive = false;
+
+          if (banner) banner.classList.add('hidden');
+          if (btnPanic) {
+            btnPanic.disabled = false;
+            btnPanic.classList.remove('opacity-50', 'pointer-events-none', 'grayscale');
+          }
+          if (btnBroadcast) {
+            btnBroadcast.disabled = false;
+            btnBroadcast.classList.remove('opacity-50', 'pointer-events-none', 'grayscale');
+          }
+
+          console.log('[Safety Pipeline] ⏳ 60-second Anti-Spam Cooldown Complete. Controls Re-enabled.');
+        }
+      }, 1000);
+    }
+  };
+
+  /* -------------------------------------------------------------------------- */
+  /*                  ACTUAL PAYLOAD TRANSMISSION HANDLERS                      */
+  /* -------------------------------------------------------------------------- */
+
+  async function executePanicSosDispatch(payload) {
     acquireHighAccuracyGps();
 
     const messageId = PacketEngine.generateMessageId();
     AppState.lastSentMessageId = messageId;
 
-    // Set Tracking Status to Awaiting ACK
     const trackingCard = document.getElementById('senderLiveTrackingCard');
     const statusText = document.getElementById('senderTrackingStatusText');
     const statusBadge = document.getElementById('senderTrackingBadge');
@@ -1522,10 +1837,10 @@
       trackingCard.className = 'bg-tactical-900/90 border border-amber-500/60 rounded-2xl p-4 shadow-xl font-mono text-xs flex items-center justify-between gap-3 mb-6';
     }
     if (statusText) {
-      statusText.innerHTML = `<span class="text-amber-300 font-extrabold">🚨 1-TAP PANIC BEACON #${messageId} BROADCASTED // Awaiting Base Station ACK...</span>`;
+      statusText.innerHTML = `<span class="text-amber-300 font-extrabold">🚨 EMERGENCY BEACON #${messageId} TRANSMITTED // Awaiting Base Station ACK...</span>`;
     }
     if (statusBadge) {
-      statusBadge.textContent = 'PANIC SOS SENT';
+      statusBadge.textContent = 'SOS DISPATCHED';
       statusBadge.className = 'text-[10px] px-2.5 py-1 rounded-lg bg-red-600 text-white font-mono font-bold animate-pulse shadow-md';
     }
     if (trackingDot) {
@@ -1537,10 +1852,10 @@
 
     const packetBytes = PacketEngine.createPacket({
       messageId: messageId,
-      distressType: AppState.activeDistressType || 1,
+      distressType: payload.distressType || AppState.activeDistressType || 1,
       latitude: AppState.currentLat,
       longitude: AppState.currentLon,
-      message: 'PANIC SOS: NEED RESCUE',
+      message: payload.message || 'PANIC SOS: NEED RESCUE',
       ttl: 3
     });
 
@@ -1552,9 +1867,11 @@
 
       const parsed = PacketEngine.parsePacket(packetBytes);
       if (parsed.valid) {
+        parsed.deviceId = getOrCreateDeviceId();
         handleIncomingPacket(parsed, {
           dataUrl: voiceDataUrl,
-          duration: voiceDuration
+          duration: voiceDuration,
+          deviceId: parsed.deviceId
         });
       }
 
@@ -1569,33 +1886,25 @@
       if (txCountEl) txCountEl.textContent = AppState.stats.txCount;
 
     } catch (err) {
-      alert(`Panic Transmission Notice: ${err.message}`);
+      alert(`Dispatch Notice: ${err.message}`);
     }
   }
 
-  /* -------------------------------------------------------------------------- */
-  /*                 REGULAR BROADCAST SOS HANDLER & AUTO-CLEAR                 */
-  /* -------------------------------------------------------------------------- */
-
-  async function handleBroadcastSos(source) {
-    const isSenderView = (source === 'sender');
-
-    const latInput = isSenderView ? document.getElementById('senderInputLat') : document.getElementById('meshInputLat');
-    const lonInput = isSenderView ? document.getElementById('senderInputLon') : document.getElementById('meshInputLon');
-    const msgInput = isSenderView ? document.getElementById('senderInputMessage') : document.getElementById('meshInputMessage');
+  async function executeRegularSosDispatch(payload) {
+    const latInput = document.getElementById('senderInputLat') || document.getElementById('meshInputLat');
+    const lonInput = document.getElementById('senderInputLon') || document.getElementById('meshInputLon');
+    const msgInput = document.getElementById('senderInputMessage') || document.getElementById('meshInputMessage');
 
     const lat = parseFloat(latInput ? latInput.value : AppState.currentLat) || AppState.currentLat;
     const lon = parseFloat(lonInput ? lonInput.value : AppState.currentLon) || AppState.currentLon;
-    const msg = msgInput ? msgInput.value : 'NEED RESCUE ASAP';
+    const msg = msgInput ? msgInput.value : (payload.message || 'NEED RESCUE ASAP');
     const messageId = PacketEngine.generateMessageId();
     AppState.lastSentMessageId = messageId;
 
-    // Update Sender Tracking Card to "Awaiting Base Station ACK..."
     const trackingCard = document.getElementById('senderLiveTrackingCard');
     const statusText = document.getElementById('senderTrackingStatusText');
     const statusBadge = document.getElementById('senderTrackingBadge');
     const trackingDot = document.getElementById('senderTrackingDot');
-    const meshBadge = document.getElementById('meshSenderTrackingBadge');
 
     if (trackingCard) {
       trackingCard.className = 'bg-tactical-900/90 border border-amber-500/50 rounded-2xl p-4 shadow-xl font-mono text-xs flex items-center justify-between gap-3 mb-6';
@@ -1612,10 +1921,6 @@
         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
         <span class="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
       `;
-    }
-    if (meshBadge) {
-      meshBadge.textContent = 'AWAITING ACK...';
-      meshBadge.className = 'text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold animate-pulse';
     }
 
     const packetBytes = PacketEngine.createPacket({
@@ -1635,9 +1940,11 @@
 
       const parsed = PacketEngine.parsePacket(packetBytes);
       if (parsed.valid) {
+        parsed.deviceId = getOrCreateDeviceId();
         handleIncomingPacket(parsed, {
           dataUrl: voiceDataUrl,
-          duration: voiceDuration
+          duration: voiceDuration,
+          deviceId: parsed.deviceId
         });
       }
 
@@ -1645,12 +1952,10 @@
         AppState.audioModem.transmitPacket(packetBytes).catch(() => {});
       }
 
-      if (isSenderView) {
-        if (msgInput) msgInput.value = '';
-        const charCounter = document.getElementById('senderCharCounter');
-        if (charCounter) charCounter.textContent = '0 / 17 Bytes';
-        discardVoiceRecording();
-      }
+      if (msgInput) msgInput.value = '';
+      const charCounter = document.getElementById('senderCharCounter');
+      if (charCounter) charCounter.textContent = '0 / 17 Bytes';
+      discardVoiceRecording();
 
       AppState.stats.txCount++;
       const txCountEl = document.getElementById('statTxCount');
@@ -1658,6 +1963,158 @@
 
     } catch (err) {
       alert(`Transmission Notice: ${err.message}`);
+    }
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /*               TRIGGER INITIATION THROUGH SAFETY PIPELINE                   */
+  /* -------------------------------------------------------------------------- */
+
+  function handleOneTapPanicSos() {
+    SafetyPipeline.initiateSafetyCancelOverlay({
+      source: 'panic',
+      distressType: AppState.activeDistressType || 1,
+      message: 'PANIC SOS: NEED RESCUE'
+    });
+  }
+
+  function handleBroadcastSos(source) {
+    const msg = document.getElementById('senderInputMessage')?.value || 'NEED RESCUE ASAP';
+    SafetyPipeline.initiateSafetyCancelOverlay({
+      source: 'regular',
+      distressType: AppState.activeDistressType || 1,
+      message: msg
+    });
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /*                MEDIAPIPE HANDS-FREE GESTURE CLASSIFIER                     */
+  /* -------------------------------------------------------------------------- */
+
+  function classifyHandLandmarks(landmarks) {
+    if (!landmarks || landmarks.length < 21) return null;
+
+    // Landmark indexes:
+    // Wrist: 0, Thumb Tip: 4, Index Tip: 8, Middle Tip: 12, Ring Tip: 16, Pinky Tip: 20
+    // Index PIP: 6, Middle PIP: 10, Ring PIP: 14, Pinky PIP: 18
+    const isIndexExtended = landmarks[8].y < landmarks[6].y;
+    const isMiddleExtended = landmarks[12].y < landmarks[10].y;
+    const isRingExtended = landmarks[16].y < landmarks[14].y;
+    const isPinkyExtended = landmarks[20].y < landmarks[18].y;
+
+    // 1. Closed Fist: All 4 fingers folded below PIP
+    if (!isIndexExtended && !isMiddleExtended && !isRingExtended && !isPinkyExtended) {
+      return 'FIST';
+    }
+
+    // 2. Pointing Index: Only index extended
+    if (isIndexExtended && !isMiddleExtended && !isRingExtended && !isPinkyExtended) {
+      return 'POINTING';
+    }
+
+    // 3. V-Sign (Peace): Index and Middle extended, Ring and Pinky folded
+    if (isIndexExtended && isMiddleExtended && !isRingExtended && !isPinkyExtended) {
+      return 'V_SIGN';
+    }
+
+    return null;
+  }
+
+  function drawLandmarksOnCanvas(ctx, landmarks, width, height) {
+    ctx.strokeStyle = '#06B6D4';
+    ctx.lineWidth = 2;
+    ctx.fillStyle = '#EF4444';
+
+    // Draw landmark points
+    for (let i = 0; i < landmarks.length; i++) {
+      const x = landmarks[i].x * width;
+      const y = landmarks[i].y * height;
+      ctx.beginPath();
+      ctx.arc(x, y, 3.5, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+  }
+
+  async function toggleMediaPipeGestureCamera() {
+    const video = document.getElementById('gestureVideoElement');
+    const canvas = document.getElementById('gestureCanvasOverlay');
+    const container = document.getElementById('gestureCameraContainer');
+    const btnText = document.getElementById('gestureCameraBtnText');
+
+    if (SafetyPipeline.gesture.active) {
+      // Stop Camera
+      if (SafetyPipeline.gesture.cameraStream) {
+        SafetyPipeline.gesture.cameraStream.getTracks().forEach(t => t.stop());
+        SafetyPipeline.gesture.cameraStream = null;
+      }
+      SafetyPipeline.gesture.active = false;
+      if (container) container.classList.add('hidden');
+      if (btnText) btnText.textContent = 'Start Gesture Camera';
+      SafetyPipeline.resetGestureHold();
+      return;
+    }
+
+    try {
+      if (container) container.classList.remove('hidden');
+      if (btnText) btnText.textContent = 'Stop Gesture Camera';
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480, facingMode: 'user' }
+      });
+      SafetyPipeline.gesture.cameraStream = stream;
+      if (video) {
+        video.srcObject = stream;
+        await video.play();
+      }
+
+      SafetyPipeline.gesture.active = true;
+
+      // Initialize MediaPipe Hands if library is loaded
+      if (window.Hands && window.Camera) {
+        const hands = new window.Hands({
+          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+          maxNumHands: 1,
+          modelComplexity: 1,
+          minDetectionConfidence: 0.6,
+          minTrackingConfidence: 0.55
+        });
+
+        hands.onResults((results) => {
+          if (!SafetyPipeline.gesture.active || !canvas) return;
+          const ctx = canvas.getContext('2d');
+          canvas.width = video.videoWidth || 640;
+          canvas.height = video.videoHeight || 480;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            const landmarks = results.multiHandLandmarks[0];
+            drawLandmarksOnCanvas(ctx, landmarks, canvas.width, canvas.height);
+            const gesture = classifyHandLandmarks(landmarks);
+            SafetyPipeline.onGestureDetected(gesture, landmarks);
+          } else {
+            SafetyPipeline.onGestureDetected(null);
+          }
+        });
+
+        const camera = new window.Camera(video, {
+          onFrame: async () => {
+            if (SafetyPipeline.gesture.active && video.readyState >= 2) {
+              await hands.send({ image: video });
+            }
+          },
+          width: 640,
+          height: 480
+        });
+
+        camera.start();
+        SafetyPipeline.gesture.handsDetector = hands;
+      }
+    } catch (err) {
+      console.warn('Camera notice:', err);
+      alert(`Camera Notice: ${err.message}\nYou can use the 1.5s Hold Test buttons below!`);
     }
   }
 
@@ -1938,11 +2395,30 @@
       });
     }
 
-    if (btnCloseBlockedFooter && modalBlocked) {
-      btnCloseBlockedFooter.addEventListener('click', () => {
-        modalBlocked.classList.add('hidden');
+    // Safety Dispatch Pipeline Listeners
+    const btnCancelDispatch = document.getElementById('btnCancelDispatch');
+    if (btnCancelDispatch) {
+      btnCancelDispatch.addEventListener('click', () => {
+        SafetyPipeline.abortCancelOverlay();
       });
     }
+
+    const btnToggleGesture = document.getElementById('btnToggleGestureCamera');
+    if (btnToggleGesture) {
+      btnToggleGesture.addEventListener('click', toggleMediaPipeGestureCamera);
+    }
+
+    document.querySelectorAll('.btn-test-gesture').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const gesture = btn.dataset.gesture;
+        SafetyPipeline.onGestureDetected(gesture);
+      });
+    });
+
+    // Cleanup all timers on unload
+    window.addEventListener('beforeunload', () => {
+      SafetyPipeline.cleanupAllTimers();
+    });
 
     updateBlockedCountBadge();
   }
