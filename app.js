@@ -904,6 +904,142 @@
   }
 
   /* -------------------------------------------------------------------------- */
+  /*            ANTI-MISUSE, DEVICE FINGERPRINTING & ROGUE DEVICE BLOCKING      */
+  /* -------------------------------------------------------------------------- */
+
+  function getOrCreateDeviceId() {
+    let id = localStorage.getItem('silentbridge_device_id');
+    if (!id) {
+      id = 'DEV-' + Math.floor(1000 + Math.random() * 9000).toString(16).toUpperCase();
+      localStorage.setItem('silentbridge_device_id', id);
+    }
+    return id;
+  }
+
+  function getBlockedDevices() {
+    try {
+      const data = localStorage.getItem('silentbridge_blocked_devices');
+      if (data) return JSON.parse(data);
+    } catch (e) {}
+    return [];
+  }
+
+  function blockDevice(deviceId, reason = 'Hoax / False Alarm / Spam') {
+    const blocked = getBlockedDevices();
+    if (!blocked.some(b => b.deviceId === deviceId)) {
+      blocked.push({ deviceId, reason, timestamp: Date.now() });
+      localStorage.setItem('silentbridge_blocked_devices', JSON.stringify(blocked));
+    }
+    // Drop all active packets from this rogue device
+    AppState.receivedPackets = AppState.receivedPackets.filter(p => p.deviceId !== deviceId);
+    renderEmergencyFeeds();
+    updateBlockedCountBadge();
+    renderBlockedDevicesModal();
+    alert(`Device [${deviceId}] has been blacklisted and blocked. All future transmissions from this device will be rejected.`);
+  }
+
+  function unblockDevice(deviceId) {
+    let blocked = getBlockedDevices();
+    blocked = blocked.filter(b => b.deviceId !== deviceId);
+    localStorage.setItem('silentbridge_blocked_devices', JSON.stringify(blocked));
+    updateBlockedCountBadge();
+    renderBlockedDevicesModal();
+  }
+
+  function updateBlockedCountBadge() {
+    const badge = document.getElementById('statBlockedCount');
+    if (badge) {
+      badge.textContent = getBlockedDevices().length;
+    }
+  }
+
+  function renderBlockedDevicesModal() {
+    const container = document.getElementById('blockedDevicesListContainer');
+    if (!container) return;
+
+    const blocked = getBlockedDevices();
+    if (blocked.length === 0) {
+      container.innerHTML = `
+        <div class="p-4 text-center text-slate-500 font-mono text-xs border border-dashed border-tactical-border rounded-xl">
+          No devices currently blocked. All survivor beacons permitted.
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = blocked.map(b => `
+      <div class="p-3 rounded-xl bg-tactical-950 border border-rose-500/30 flex items-center justify-between gap-2 text-xs font-mono">
+        <div>
+          <strong class="text-rose-400 block">${b.deviceId}</strong>
+          <span class="text-[10px] text-slate-400">${b.reason} • ${formatRelativeTime(b.timestamp)}</span>
+        </div>
+        <button type="button" class="btn-unblock-dev text-[11px] px-2.5 py-1 rounded-lg bg-tactical-800 hover:bg-tactical-700 text-slate-200 border border-tactical-border font-bold" data-devid="${b.deviceId}">
+          Unblock
+        </button>
+      </div>
+    `).join('');
+
+    container.querySelectorAll('.btn-unblock-dev').forEach(btn => {
+      btn.addEventListener('click', () => {
+        unblockDevice(btn.dataset.devid);
+      });
+    });
+  }
+
+  function calculateTrustScore(pkt) {
+    if (pkt.isManuallyVerified) {
+      return { score: 100, label: 'MANUALLY VERIFIED ✓', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', icon: 'shield-check' };
+    }
+    if (pkt.isFalseAlarm) {
+      return { score: 0, label: 'HOAX / FALSE ALARM FLAGGED', badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/40', icon: 'alert-triangle' };
+    }
+
+    let score = 15; // Base score
+
+    // Factor 1: Voice SOS Attached (+40%)
+    if (pkt.hasVoice) score += 40;
+
+    // Factor 2: Satellite GPS precision lock (+30%)
+    if (pkt.latitude !== 0 && pkt.longitude !== 0) score += 30;
+
+    // Factor 3: Proximity cluster (+15%)
+    const hasNearby = AppState.receivedPackets.some(p => 
+      p.messageId !== pkt.messageId && 
+      Math.abs(p.latitude - pkt.latitude) < 0.015 && 
+      Math.abs(p.longitude - pkt.longitude) < 0.015
+    );
+    if (hasNearby) score += 15;
+
+    score = Math.min(100, Math.max(10, score));
+
+    if (score >= 75) {
+      return { score, label: `HIGH TRUST (${score}%)`, badgeClass: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40', icon: 'shield-check' };
+    } else if (score >= 45) {
+      return { score, label: `NEEDS REVIEW (${score}%)`, badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/40', icon: 'shield-alert' };
+    } else {
+      return { score, label: `SUSPICIOUS (${score}%)`, badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40', icon: 'alert-octagon' };
+    }
+  }
+
+  function markBeaconVerified(messageId) {
+    const packet = AppState.receivedPackets.find(p => p.messageId === messageId);
+    if (packet) {
+      packet.isManuallyVerified = true;
+      packet.isFalseAlarm = false;
+      renderEmergencyFeeds();
+    }
+  }
+
+  function flagBeaconFalseAlarm(messageId) {
+    const packet = AppState.receivedPackets.find(p => p.messageId === messageId);
+    if (packet) {
+      packet.isFalseAlarm = true;
+      packet.isManuallyVerified = false;
+      renderEmergencyFeeds();
+    }
+  }
+
+  /* -------------------------------------------------------------------------- */
   /*           MULTI-SENDER LIVE FEED & GOOGLE MAPS DIRECT LINKS                */
   /* -------------------------------------------------------------------------- */
 
@@ -927,19 +1063,33 @@
         const timeStr = formatRelativeTime(pkt.timestamp);
         const googleMapsUrl = `https://www.google.com/maps?q=${pkt.latitude},${pkt.longitude}`;
         const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${pkt.latitude},${pkt.longitude}`;
+        const trust = calculateTrustScore(pkt);
+        const devId = pkt.deviceId || `DEV-${((pkt.messageId * 17) % 9000 + 1000).toString(16).toUpperCase()}`;
+        pkt.deviceId = devId;
 
         return `
-          <div class="p-4 sm:p-5 rounded-2xl border ${meta.bgClass} bg-tactical-900/95 shadow-xl transition-all hover:border-slate-500 relative" id="card_${pkt.messageId}">
+          <div class="p-4 sm:p-5 rounded-2xl border ${pkt.isFalseAlarm ? 'border-amber-500/60 bg-amber-950/10' : meta.bgClass} bg-tactical-900/95 shadow-xl transition-all hover:border-slate-500 relative" id="card_${pkt.messageId}">
             
-            <!-- Top Line: Disaster Badge, Timestamp -->
-            <div class="flex items-center justify-between mb-2.5">
-              <div class="flex items-center gap-2">
+            <!-- Top Line: Disaster Badge, Trust Score, Device ID & Timestamp -->
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+              <div class="flex flex-wrap items-center gap-2">
                 <span class="px-3 py-1 rounded-lg text-xs font-mono font-extrabold uppercase ${meta.badgeClass} flex items-center gap-1.5 shadow-sm">
                   <i data-lucide="${meta.icon}" class="w-4 h-4"></i>
                   ${meta.name}
                 </span>
+
+                <!-- Trust Score Pill -->
+                <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-mono font-extrabold uppercase border ${trust.badgeClass} flex items-center gap-1">
+                  <i data-lucide="${trust.icon}" class="w-3 h-3"></i>
+                  ${trust.label}
+                </span>
+
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-tactical-800 text-slate-400 border border-tactical-border font-bold">
+                  🆔 ${devId}
+                </span>
                 <span class="text-xs font-mono text-slate-400 font-bold">#${pkt.messageId}</span>
               </div>
+
               <div class="text-xs font-mono text-slate-400 flex items-center gap-1.5">
                 <i data-lucide="clock" class="w-3.5 h-3.5 text-slate-500"></i>
                 <span>${pkt.timeString || timeStr}</span>
@@ -947,7 +1097,7 @@
             </div>
 
             <!-- Message & Voice Tag -->
-            <div class="text-base font-mono font-extrabold text-white mb-3 tracking-wide flex items-center justify-between">
+            <div class="text-base font-mono font-extrabold text-white mb-3 tracking-wide flex flex-wrap items-center justify-between gap-2">
               <span>"${pkt.message}"</span>
               ${pkt.hasVoice ? `
                 <span class="px-2.5 py-1 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40 text-xs flex items-center gap-1 font-bold">
@@ -976,19 +1126,30 @@
               </div>
             </div>
 
-            <!-- Action Controls: Listen Voice, Send ACK, Clear -->
+            <!-- Action Controls: Listen Voice, Verify, Flag False Alarm, Block Device, Send ACK, Clear -->
             <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-tactical-border/50">
-              <div class="flex items-center gap-2.5">
-                <button type="button" class="btn-play-voice-card text-xs px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-mono font-bold transition-all flex items-center gap-1.5 shadow-md shadow-rose-950/40" data-msgid="${pkt.messageId}">
-                  <i data-lucide="play" class="w-4 h-4"></i> Play Voice SOS
+              <div class="flex flex-wrap items-center gap-2">
+                <button type="button" class="btn-play-voice-card text-xs px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-mono font-bold transition-all flex items-center gap-1.5 shadow-md shadow-rose-950/40" data-msgid="${pkt.messageId}">
+                  <i data-lucide="play" class="w-3.5 h-3.5"></i> Play Voice
                 </button>
-                <button type="button" class="btn-send-ack text-xs px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold transition-all flex items-center gap-1.5 shadow-md shadow-emerald-950/40" data-msgid="${pkt.messageId}">
-                  <i data-lucide="check-check" class="w-4 h-4"></i> Dispatch Rescue & Send ACK
+                <button type="button" class="btn-send-ack text-xs px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold transition-all flex items-center gap-1.5 shadow-md shadow-emerald-950/40" data-msgid="${pkt.messageId}">
+                  <i data-lucide="check-check" class="w-3.5 h-3.5"></i> Dispatch & ACK
+                </button>
+
+                <!-- Anti-Misuse Triage Controls -->
+                <button type="button" class="btn-verify-beacon text-xs px-2.5 py-1.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/40 font-mono font-bold flex items-center gap-1" data-msgid="${pkt.messageId}" title="Manually verify distress beacon">
+                  <i data-lucide="check" class="w-3 h-3"></i> Verify
+                </button>
+                <button type="button" class="btn-flag-false text-xs px-2.5 py-1.5 rounded-xl bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-500/40 font-mono font-bold flex items-center gap-1" data-msgid="${pkt.messageId}" title="Flag as Hoax / False Alarm">
+                  <i data-lucide="flag" class="w-3 h-3"></i> False Alarm
+                </button>
+                <button type="button" class="btn-block-dev text-xs px-2.5 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-500/40 font-mono font-bold flex items-center gap-1" data-devid="${devId}" title="Blacklist and Block this rogue device">
+                  <i data-lucide="ban" class="w-3 h-3"></i> Block Device
                 </button>
               </div>
 
               <div>
-                <button type="button" class="btn-clear-single-beacon text-xs px-3 py-1.5 rounded-lg bg-tactical-800 hover:bg-tactical-700 text-slate-400 hover:text-slate-200 font-mono transition-colors" data-msgid="${pkt.messageId}">
+                <button type="button" class="btn-clear-single-beacon text-xs px-2.5 py-1.5 rounded-lg bg-tactical-800 hover:bg-tactical-700 text-slate-400 hover:text-slate-200 font-mono transition-colors" data-msgid="${pkt.messageId}">
                   Clear
                 </button>
               </div>
@@ -1021,7 +1182,30 @@
         const msgId = parseInt(btn.dataset.msgid, 10);
         await dispatchRescueAck(msgId);
         btn.textContent = 'ACK Sent ✓ (Rescue En Route)';
-        btn.className = 'text-xs px-3.5 py-2 rounded-xl bg-emerald-900 text-emerald-300 border border-emerald-500/40 font-mono font-bold';
+        btn.className = 'text-xs px-3 py-1.5 rounded-xl bg-emerald-900 text-emerald-300 border border-emerald-500/40 font-mono font-bold';
+      });
+    });
+
+    document.querySelectorAll('.btn-verify-beacon').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const msgId = parseInt(btn.dataset.msgid, 10);
+        markBeaconVerified(msgId);
+      });
+    });
+
+    document.querySelectorAll('.btn-flag-false').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const msgId = parseInt(btn.dataset.msgid, 10);
+        flagBeaconFalseAlarm(msgId);
+      });
+    });
+
+    document.querySelectorAll('.btn-block-dev').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const devId = btn.dataset.devid;
+        if (confirm(`Are you sure you want to blacklist device [${devId}]? All future signals from this sender will be dropped.`)) {
+          blockDevice(devId);
+        }
       });
     });
 
@@ -1217,6 +1401,17 @@
       return;
     }
 
+    // Attach or extract persistent Device ID
+    const devId = packet.deviceId || (voiceAttachment && voiceAttachment.deviceId) || `DEV-${((packet.messageId * 17) % 9000 + 1000).toString(16).toUpperCase()}`;
+    packet.deviceId = devId;
+
+    // Check if this sender device has been blacklisted / blocked
+    const blocked = getBlockedDevices();
+    if (blocked.some(b => b.deviceId === devId)) {
+      console.warn(`[SilentBridge Anti-Misuse] 🚫 Blocked rogue beacon #${packet.messageId} from blacklisted device: ${devId}`);
+      return;
+    }
+
     AppState.seenPacketIds.add(packet.messageId);
 
     if (voiceAttachment) {
@@ -1253,9 +1448,11 @@
             const rawBytes = PacketEngine.fromHex(data.packetHex);
             const parsed = PacketEngine.parsePacket(rawBytes);
             if (parsed.valid) {
+              parsed.deviceId = data.deviceId || getOrCreateDeviceId();
               handleIncomingPacket(parsed, {
                 dataUrl: data.voiceDataUrl,
-                duration: data.voiceDuration
+                duration: data.voiceDuration,
+                deviceId: data.deviceId
               });
             }
           } else if (data && data.type === 'ACK_BROADCAST') {
@@ -1273,6 +1470,7 @@
         packetHex: PacketEngine.toHex(packetBytes, ''),
         voiceDataUrl: voiceDataUrl || null,
         voiceDuration: voiceDuration || 0,
+        deviceId: getOrCreateDeviceId(),
         timestamp: Date.now()
       });
     }
@@ -1693,6 +1891,33 @@
         if (banner) banner.classList.add('hidden');
       });
     }
+
+    // Blocked Rogue Devices Modal Event Listeners
+    const btnOpenBlocked = document.getElementById('btnOpenBlockedModal');
+    const modalBlocked = document.getElementById('modalBlockedDevices');
+    const btnCloseBlocked = document.getElementById('btnCloseBlockedModal');
+    const btnCloseBlockedFooter = document.getElementById('btnCloseBlockedModalFooter');
+
+    if (btnOpenBlocked && modalBlocked) {
+      btnOpenBlocked.addEventListener('click', () => {
+        renderBlockedDevicesModal();
+        modalBlocked.classList.remove('hidden');
+      });
+    }
+
+    if (btnCloseBlocked && modalBlocked) {
+      btnCloseBlocked.addEventListener('click', () => {
+        modalBlocked.classList.add('hidden');
+      });
+    }
+
+    if (btnCloseBlockedFooter && modalBlocked) {
+      btnCloseBlockedFooter.addEventListener('click', () => {
+        modalBlocked.classList.add('hidden');
+      });
+    }
+
+    updateBlockedCountBadge();
   }
 
   document.addEventListener('DOMContentLoaded', initApp);

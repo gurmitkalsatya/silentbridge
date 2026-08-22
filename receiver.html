@@ -130,21 +130,26 @@
     </div>
 
     <!-- Status Sub-Bar (Active once logged in) -->
-    <div id="dashboardSubBar" class="hidden max-w-5xl mx-auto mt-2 pt-2 border-t border-tactical-border/60 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono text-slate-400">
+    <div id="dashboardSubBar" class="hidden max-w-5xl mx-auto mt-2 pt-2 border-t border-tactical-border/60 grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs font-mono text-slate-400">
       <div class="flex items-center gap-2">
         <span class="text-slate-500">RECEIVED SOS:</span>
         <span id="statRxCount" class="text-emerald-400 font-bold">0</span>
       </div>
       <div class="flex items-center gap-2">
-        <span class="text-slate-500">ACK DISPATCHED:</span>
+        <span class="text-slate-500">ACK SENT:</span>
         <span id="statAckCount" class="text-white font-bold">0</span>
       </div>
       <div class="flex items-center gap-2">
-        <span class="text-slate-500">ACTIVE FREQ:</span>
+        <span class="text-slate-500">CARRIER:</span>
         <span class="text-amber-400 font-bold">18.0 - 19.5 kHz</span>
       </div>
       <div class="flex items-center gap-2">
-        <span class="text-slate-500">HQ TIME:</span>
+        <button id="btnOpenBlockedModal" class="text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1">
+          <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i>
+          <span>BLOCKED: <strong id="statBlockedCount">0</strong></span>
+        </button>
+      </div>
+      <div class="flex items-center gap-2 text-right justify-end">
         <span id="statClock" class="text-white font-bold">--:--:--</span>
       </div>
     </div>
@@ -332,6 +337,33 @@
 
         <!-- Scrollable Feed Container -->
         <div id="receiverEmergencyFeedList" class="space-y-3.5"></div>
+      </div>
+
+      <!-- 3. BLOCKED ROGUE DEVICES MODAL -->
+      <div id="modalBlockedDevices" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-tactical-900 border border-tactical-border rounded-3xl p-6 max-w-lg w-full shadow-2xl font-mono text-xs flex flex-col gap-4">
+          <div class="flex items-center justify-between border-b border-tactical-border pb-3">
+            <div class="flex items-center gap-2">
+              <i data-lucide="shield-alert" class="w-5 h-5 text-rose-400"></i>
+              <h3 class="text-base font-bold text-white uppercase">Blocked Rogue Devices</h3>
+            </div>
+            <button type="button" id="btnCloseBlockedModal" class="p-1.5 rounded-lg bg-tactical-800 hover:bg-tactical-700 text-slate-400 hover:text-white">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <p class="text-slate-400 text-[11px]">All distress signals and siren alerts originating from these blacklisted device fingerprints are automatically dropped.</p>
+
+          <div id="blockedDevicesListContainer" class="space-y-2 max-h-60 overflow-y-auto">
+            <!-- Populated dynamically -->
+          </div>
+
+          <div class="pt-2 border-t border-tactical-border flex justify-end">
+            <button type="button" id="btnCloseBlockedModalFooter" class="px-4 py-2 rounded-xl bg-tactical-800 hover:bg-tactical-700 text-slate-200 font-bold">
+              Close Manager
+            </button>
+          </div>
+        </div>
       </div>
 
     </div>
