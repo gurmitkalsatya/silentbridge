@@ -202,6 +202,8 @@
       sessionStorage.setItem('silentbridge_rescue_unlocked', 'true');
     } catch (e) {}
 
+    renderEmergencyFeeds();
+
     if (window.lucide) window.lucide.createIcons();
   }
 
@@ -1231,6 +1233,14 @@
         });
       }
 
+      // Dual-Layer LocalStorage Event Sync (Bulletproof across all windows/tabs)
+      try {
+        localStorage.setItem('silentbridge_last_ack_event', JSON.stringify({
+          targetMessageId: targetMessageId,
+          timestamp: Date.now()
+        }));
+      } catch (e) {}
+
       AppState.stats.ackCount++;
       const ackCountEl = document.getElementById('statAckCount');
       if (ackCountEl) ackCountEl.textContent = AppState.stats.ackCount;
@@ -1411,15 +1421,14 @@
     }
 
     // AUTOMATIC FALSE ALARM IDENTIFICATION & TRIAGE ENGINE:
-    // If NO voice memo SOS is attached, or if GPS is missing/invalid, auto-classify as potential false alarm
+    // If coordinates are (0,0) or missing and no voice SOS is attached, classify as potential false alarm
     const hasValidGps = (packet.latitude !== 0 || packet.longitude !== 0) && Math.abs(packet.latitude) <= 90 && Math.abs(packet.longitude) <= 180;
+    const isExplicitPanic = packet.message && (packet.message.includes('PANIC') || packet.message.includes('RESCUE') || packet.message.includes('TRAPPED') || packet.message.includes('MEDIC'));
     
-    if (!packet.hasVoice || !hasValidGps) {
+    if (!hasValidGps && !packet.hasVoice) {
       packet.isFalseAlarm = true;
       packet.autoFlagged = true;
-      packet.autoFlaggedReason = !packet.hasVoice 
-        ? 'No Voice SOS Memo Attached (Acoustic Verification Failed)'
-        : 'Missing / Invalid Satellite GPS Coordinates';
+      packet.autoFlaggedReason = 'Missing Satellite GPS & No Voice SOS Memo Attached';
       console.warn(`[SilentBridge Triage] ⚠️ Auto-Flagged Potential False Alarm on Beacon #${packet.messageId}: ${packet.autoFlaggedReason}`);
     } else {
       packet.isFalseAlarm = false;
@@ -1433,8 +1442,9 @@
     AppState.receivedPackets.unshift(packet);
     renderEmergencyFeeds();
     setActiveVoiceDispatch(packet);
+    persistDistressPackets();
 
-    // 🚨 Sound Siren ONLY for legitimate verified emergency beacons (Mute siren for auto-flagged false alarms)
+    // 🚨 Sound Siren for verified emergency beacons (Mute siren for auto-flagged false alarms)
     if (!packet.isFalseAlarm) {
       playEmergencySiren();
     } else {
@@ -1460,8 +1470,38 @@
     } catch (e) {}
   }
 
+  function persistDistressPackets() {
+    try {
+      localStorage.setItem('silentbridge_distress_history', JSON.stringify(AppState.receivedPackets.slice(0, 50)));
+    } catch (e) {}
+  }
+
+  function loadPersistedDistressPackets() {
+    try {
+      const raw = localStorage.getItem('silentbridge_distress_history');
+      if (raw) {
+        const list = JSON.parse(raw);
+        if (Array.isArray(list) && list.length > 0) {
+          list.forEach(p => {
+            if (!AppState.seenPacketIds.has(p.messageId)) {
+              AppState.seenPacketIds.add(p.messageId);
+              AppState.receivedPackets.push(p);
+            }
+          });
+          AppState.stats.rxCount = AppState.receivedPackets.length;
+          const rxCountEl = document.getElementById('statRxCount');
+          if (rxCountEl) rxCountEl.textContent = AppState.stats.rxCount;
+          renderEmergencyFeeds();
+          if (AppState.receivedPackets.length > 0) {
+            setActiveVoiceDispatch(AppState.receivedPackets[0]);
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
   /* -------------------------------------------------------------------------- */
-  /*            CROSS-TAB BROADCASTCHANNEL SYNCHRONIZATION                      */
+  /*            CROSS-TAB BROADCASTCHANNEL & STORAGE SYNCHRONIZATION            */
   /* -------------------------------------------------------------------------- */
 
   function initCrossTabSync() {
@@ -1469,37 +1509,68 @@
       if ('BroadcastChannel' in window) {
         AppState.syncChannel = new BroadcastChannel('silentbridge_instant_sync');
         AppState.syncChannel.onmessage = (event) => {
-          const data = event.data;
-          if (data && data.type === 'DISTRESS_BROADCAST') {
-            const rawBytes = PacketEngine.fromHex(data.packetHex);
-            const parsed = PacketEngine.parsePacket(rawBytes);
-            if (parsed.valid) {
-              parsed.deviceId = data.deviceId || getOrCreateDeviceId();
-              handleIncomingPacket(parsed, {
-                dataUrl: data.voiceDataUrl,
-                duration: data.voiceDuration,
-                deviceId: data.deviceId
-              });
-            }
-          } else if (data && data.type === 'ACK_BROADCAST') {
-            handleIncomingAck(data.targetMessageId);
-          }
+          processSyncEvent(event.data);
         };
       }
     } catch (e) {}
+
+    // Bulletproof Window Storage Event Listener (Ensures delivery across all tabs/windows)
+    window.addEventListener('storage', (event) => {
+      try {
+        if (event.key === 'silentbridge_last_distress_event' && event.newValue) {
+          const data = JSON.parse(event.newValue);
+          processSyncEvent(data);
+        } else if (event.key === 'silentbridge_last_ack_event' && event.newValue) {
+          const data = JSON.parse(event.newValue);
+          if (data && data.targetMessageId) {
+            handleIncomingAck(data.targetMessageId);
+          }
+        }
+      } catch (e) {}
+    });
+
+    loadPersistedDistressPackets();
+  }
+
+  function processSyncEvent(data) {
+    if (!data) return;
+    if (data.type === 'DISTRESS_BROADCAST') {
+      const rawBytes = PacketEngine.fromHex(data.packetHex);
+      const parsed = PacketEngine.parsePacket(rawBytes);
+      if (parsed.valid) {
+        parsed.deviceId = data.deviceId || getOrCreateDeviceId();
+        handleIncomingPacket(parsed, {
+          dataUrl: data.voiceDataUrl,
+          duration: data.voiceDuration,
+          deviceId: data.deviceId
+        });
+      }
+    } else if (data.type === 'ACK_BROADCAST') {
+      handleIncomingAck(data.targetMessageId);
+    }
   }
 
   function broadcastDistressCrossTab(packetBytes, voiceDataUrl, voiceDuration) {
+    const payload = {
+      type: 'DISTRESS_BROADCAST',
+      packetHex: PacketEngine.toHex(packetBytes, ''),
+      voiceDataUrl: voiceDataUrl || null,
+      voiceDuration: voiceDuration || 0,
+      deviceId: getOrCreateDeviceId(),
+      timestamp: Date.now(),
+      eventId: Math.random().toString(36).substring(2)
+    };
+
     if (AppState.syncChannel) {
-      AppState.syncChannel.postMessage({
-        type: 'DISTRESS_BROADCAST',
-        packetHex: PacketEngine.toHex(packetBytes, ''),
-        voiceDataUrl: voiceDataUrl || null,
-        voiceDuration: voiceDuration || 0,
-        deviceId: getOrCreateDeviceId(),
-        timestamp: Date.now()
-      });
+      try {
+        AppState.syncChannel.postMessage(payload);
+      } catch (e) {}
     }
+
+    // Storage Event Dispatch for Instant Cross-Tab Notification
+    try {
+      localStorage.setItem('silentbridge_last_distress_event', JSON.stringify(payload));
+    } catch (e) {}
   }
 
   /* -------------------------------------------------------------------------- */
@@ -2362,6 +2433,13 @@
 
     const clearAllFeeds = () => {
       AppState.receivedPackets = [];
+      AppState.seenPacketIds.clear();
+      AppState.stats.rxCount = 0;
+      const rxCountEl = document.getElementById('statRxCount');
+      if (rxCountEl) rxCountEl.textContent = '0';
+      try {
+        localStorage.removeItem('silentbridge_distress_history');
+      } catch (e) {}
       renderEmergencyFeeds();
     };
 
