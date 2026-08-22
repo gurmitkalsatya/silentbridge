@@ -484,8 +484,7 @@
       }, 100);
 
     } catch (err) {
-      console.error('Mic access error:', err);
-      alert('Microphone access is needed to record emergency voice memos.');
+      console.warn('Microphone access note:', err);
     }
   }
 
@@ -906,7 +905,7 @@
     renderEmergencyFeeds();
     updateBlockedCountBadge();
     renderBlockedDevicesModal();
-    alert(`Device [${deviceId}] has been blacklisted and blocked. All future transmissions from this device will be rejected.`);
+    console.log(`[SilentBridge] Device [${deviceId}] blacklisted.`);
   }
 
   function unblockDevice(deviceId) {
@@ -1195,9 +1194,7 @@
     document.querySelectorAll('.btn-block-dev').forEach(btn => {
       btn.addEventListener('click', () => {
         const devId = btn.dataset.devid;
-        if (confirm(`Are you sure you want to blacklist device [${devId}]? All future signals from this sender will be dropped.`)) {
-          blockDevice(devId);
-        }
+        blockDevice(devId);
       });
     });
 
@@ -1861,7 +1858,7 @@
       if (txCountEl) txCountEl.textContent = AppState.stats.txCount;
 
     } catch (err) {
-      alert(`Dispatch Notice: ${err.message}`);
+      console.warn('Dispatch notice:', err);
     }
   }
 
@@ -1937,7 +1934,7 @@
       if (txCountEl) txCountEl.textContent = AppState.stats.txCount;
 
     } catch (err) {
-      alert(`Transmission Notice: ${err.message}`);
+      console.warn('Transmission notice:', err);
     }
   }
 
@@ -2089,7 +2086,6 @@
       }
     } catch (err) {
       console.warn('Camera notice:', err);
-      alert(`Camera Notice: ${err.message}\nYou can use the 1.5s Hold Test buttons below!`);
     }
   }
 
@@ -2205,7 +2201,7 @@
             await AppState.audioModem.startListening();
             updateAudioPowerButton(true);
           } catch (e) {
-            alert('Microphone permission is required.');
+            console.warn('Microphone permission note:', e);
           }
         }
       });
