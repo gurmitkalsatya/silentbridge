@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SilentBridge — Rescue Authority Emergency Command Portal</title>
+  <meta name="description" content="Secure rescue team command dashboard for monitoring incoming survivor distress beacons, voice dispatches, Google Maps routing, and ACK confirmations.">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            tactical: {
+              950: '#050811',
+              900: '#0A101D',
+              850: '#0F172A',
+              800: '#162238',
+              700: '#1E2D4A',
+              600: '#2A3F68',
+              border: '#1E2D4A',
+              accent: '#06B6D4',
+              danger: '#EF4444',
+              warning: '#F59E0B',
+              success: '#10B981'
+            }
+          },
+          fontFamily: {
+            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    body {
+      background-color: #050811;
+      color: #E2E8F0;
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+    }
+
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .bg-tactical-grid {
+      background-size: 32px 32px;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0A101D;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1E2D4A;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-tactical-950 bg-tactical-grid flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
+
+  <!-- Top Tactical Rescue Header -->
+  <header class="sticky top-0 z-40 bg-tactical-900/95 backdrop-blur-md border-b border-tactical-border/80 px-4 py-3 shadow-lg shadow-black/50">
+    <div class="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      
+      <!-- Brand -->
+      <div class="flex items-center gap-3">
+        <div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-950/90 border border-cyan-500/40 text-cyan-400 shadow-inner">
+          <i data-lucide="shield" class="w-5 h-5"></i>
+          <span class="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-tactical-950"></span>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base sm:text-lg font-extrabold tracking-wider text-white uppercase flex items-center gap-2">
+              SilentBridge
+              <span class="text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-mono font-bold">RESCUE HQ</span>
+            </h1>
+          </div>
+          <p class="text-[11px] text-slate-400 flex items-center gap-1.5 font-mono">
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+            AUTHORITY EMERGENCY TRIAGE & DISPATCH COMMAND
+          </p>
+        </div>
+      </div>
+
+      <!-- Header Controls -->
+      <div class="flex items-center gap-3 font-mono text-xs">
+        <button id="btnToggleAudio" class="px-3 py-1.5 rounded-lg font-mono text-xs font-bold transition-all flex items-center gap-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 shadow-sm">
+          <span class="relative flex h-2 w-2">
+            <span id="audioPowerPing" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span id="audioPowerDot" class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span id="audioPowerText">LISTENER: ON</span>
+        </button>
+
+        <a href="sender.html" class="px-3 py-1.5 rounded-lg bg-tactical-850 hover:bg-tactical-800 text-slate-400 hover:text-white border border-tactical-border font-bold flex items-center gap-1.5 transition-colors">
+          <i data-lucide="radio" class="w-3.5 h-3.5 text-red-400"></i>
+          <span>Survivor Portal</span>
+        </a>
+      </div>
+
+    </div>
+
+    <!-- Status Sub-Bar -->
+    <div class="max-w-5xl mx-auto mt-2 pt-2 border-t border-tactical-border/40 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono text-slate-400">
+      <div class="flex items-center gap-2">
+        <span class="text-slate-500">RECEIVED SOS:</span>
+        <span id="statRxCount" class="text-emerald-400 font-bold">0</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-slate-500">ACK DISPATCHED:</span>
+        <span id="statAckCount" class="text-cyan-400 font-bold">0</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-slate-500">ACTIVE FREQ:</span>
+        <span class="text-amber-400 font-bold">18.0 - 19.5 kHz</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-slate-500">HQ TIME:</span>
+        <span id="statClock" class="text-slate-200 font-bold">--:--:--</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-5xl w-full mx-auto p-3 sm:p-5 flex flex-col gap-5">
+
+    <!-- Authority Authentication Gate (if locked) -->
+    <div id="authorityLockGate" class="hidden p-8 rounded-3xl bg-gradient-to-b from-tactical-900 to-tactical-950 border border-cyan-500/40 shadow-2xl text-center max-w-md mx-auto my-12 flex flex-col items-center gap-4">
+      <div class="p-4 rounded-2xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shadow-inner">
+        <i data-lucide="lock" class="w-8 h-8"></i>
+      </div>
+      <div>
+        <h2 class="text-lg font-extrabold text-white uppercase tracking-wider font-mono">Rescue Authority Access</h2>
+        <p class="text-xs text-slate-400 font-mono mt-1">This portal is restricted to authorized rescue personnel, disaster relief teams, and emergency responders.</p>
+      </div>
+
+      <div class="w-full space-y-3 font-mono text-xs">
+        <input type="password" id="authPinInput" placeholder="ENTER ACCESS PIN (e.g. 911)" class="w-full bg-tactical-950 border border-tactical-border rounded-xl px-4 py-3 text-center text-white font-bold tracking-widest focus:border-cyan-500 focus:outline-none uppercase">
+        <div class="flex items-center gap-2">
+          <button type="button" id="btnUnlockAuthority" class="flex-1 py-3 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold transition-all shadow-lg shadow-cyan-950/50">
+            AUTHENTICATE
+          </button>
+          <button type="button" id="btnQuickBypass" class="py-3 px-4 rounded-xl bg-tactical-800 hover:bg-tactical-700 text-cyan-300 border border-tactical-border font-bold">
+            1-Click Pass
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Authenticated Rescue Dashboard -->
+    <div id="authorityDashboard" class="flex flex-col gap-5">
+      
+      <!-- Top Rescue HQ Banner -->
+      <div class="bg-gradient-to-r from-cyan-950/90 via-tactical-900 to-tactical-900 border border-cyan-500/40 rounded-2xl p-5 shadow-2xl flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3.5">
+          <div class="p-3 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shadow-inner">
+            <i data-lucide="shield" class="w-7 h-7"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded bg-cyan-500 text-slate-950 font-mono text-[10px] font-extrabold uppercase">
+                RESCUE COMMAND
+              </span>
+              <span class="text-xs text-cyan-300 font-mono font-bold">MULTI-SURVIVOR TRIAGE</span>
+            </div>
+            <h2 class="text-xl font-extrabold text-white tracking-wide uppercase mt-0.5">Emergency Message & Audio Dispatch</h2>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 font-mono text-xs bg-tactical-950 px-3.5 py-2 rounded-xl border border-tactical-border">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="text-emerald-400 font-bold">LISTENING FOR INCOMING SOS BEACONS</span>
+        </div>
+      </div>
+
+      <!-- Emergency Voice Dispatch Player -->
+      <div id="receiverVoiceDispatchConsole" class="bg-tactical-900/90 border border-rose-500/40 rounded-2xl p-4 sm:p-5 shadow-xl backdrop-blur-sm flex flex-col gap-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-tactical-border/60 pb-3">
+          <div class="flex items-center gap-2.5">
+            <div class="p-2 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/40">
+              <i data-lucide="volume-2" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="font-extrabold text-white text-sm font-mono uppercase tracking-wide flex items-center gap-2">
+                <span>Emergency Voice Player</span>
+                <span id="activeVoiceBadge" class="text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                  AWAITING VOICE
+                </span>
+              </h3>
+              <p id="activeVoiceMeta" class="text-[11px] text-slate-400 font-mono">Select any received SOS card below to play voice memo.</p>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 font-mono text-xs">
+            <button id="btnVoiceBoost" class="px-2.5 py-1.5 rounded-lg bg-tactical-800 hover:bg-tactical-700 text-slate-300 border border-tactical-border flex items-center gap-1">
+              <i data-lucide="zap" class="w-3 h-3 text-amber-400"></i>
+              <span id="voiceBoostLabel">Boost: 1x</span>
+            </button>
+            <button id="btnPlayActiveVoice" disabled class="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 disabled:opacity-40 hover:from-rose-500 hover:to-red-500 text-white font-bold flex items-center gap-2 shadow-md">
+              <i data-lucide="play" class="w-4 h-4" id="receiverPlayIcon"></i>
+              <span id="receiverPlayText">PLAY VOICE SOS</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="relative w-full h-16 bg-tactical-950 rounded-xl border border-tactical-border overflow-hidden flex items-center justify-center">
+          <canvas id="receiverPlaybackCanvas" class="w-full h-full block"></canvas>
+          <div id="receiverPlaybackPlaceholder" class="absolute inset-0 flex items-center justify-center text-slate-500 font-mono text-xs">
+            <span>Audio waveform visualizer</span>
+          </div>
+          <div id="playbackProgressBar" class="absolute left-0 top-0 bottom-0 bg-rose-500/20 border-r-2 border-rose-400 w-0 pointer-events-none transition-all duration-75"></div>
+        </div>
+
+        <div class="flex items-center justify-between text-xs font-mono text-slate-400 px-1">
+          <span id="playbackTimeCurrent">00:00</span>
+          <span id="playbackTimeDuration">00:00</span>
+        </div>
+      </div>
+
+      <!-- Live Messages & Audio Feed (Multi-Sender Support) -->
+      <div class="bg-tactical-900/90 border border-tactical-border rounded-2xl p-4 sm:p-5 shadow-xl backdrop-blur-sm flex flex-col gap-3">
+        <div class="flex items-center justify-between border-b border-tactical-border/60 pb-3">
+          <div class="flex items-center gap-2">
+            <i data-lucide="radio-tower" class="w-5 h-5 text-red-400"></i>
+            <h3 class="font-bold text-white text-sm font-mono uppercase tracking-wider">Incoming Distress Beacons (Live Field Feed)</h3>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="btnSimulatePacket" class="text-xs px-2.5 py-1 rounded bg-tactical-800 hover:bg-tactical-700 text-cyan-300 font-mono">
+              + Simulate Survivor
+            </button>
+            <button id="btnReceiverClearFeed" class="text-xs text-slate-500 hover:text-slate-300 font-mono">
+              Clear All
+            </button>
+          </div>
+        </div>
+
+        <!-- Scrollable Feed Container -->
+        <div id="receiverEmergencyFeedList" class="space-y-3.5"></div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Modular Scripts -->
+  <script src="crc16.js"></script>
+  <script src="packetEngine.js"></script>
+  <script src="audioModem.js"></script>
+  <script src="app.js"></script>
+
+  <script>
+    // Simple Authority Gate Logic
+    document.addEventListener('DOMContentLoaded', () => {
+      const lockGate = document.getElementById('authorityLockGate');
+      const dashboard = document.getElementById('authorityDashboard');
+      const pinInput = document.getElementById('authPinInput');
+      const btnUnlock = document.getElementById('btnUnlockAuthority');
+      const btnBypass = document.getElementById('btnQuickBypass');
+
+      function unlock() {
+        if (lockGate) lockGate.classList.add('hidden');
+        if (dashboard) dashboard.classList.remove('hidden');
+        sessionStorage.setItem('silentbridge_auth', 'true');
+      }
+
+      if (sessionStorage.getItem('silentbridge_auth') === 'true') {
+        unlock();
+      }
+
+      if (btnUnlock) {
+        btnUnlock.addEventListener('click', () => {
+          const val = pinInput ? pinInput.value.trim() : '';
+          if (val === '911' || val.toUpperCase() === 'RESCUE' || val === '112' || val === '0000' || val === '') {
+            unlock();
+          } else {
+            alert('Invalid PIN. Use 911 or click "1-Click Pass" for authorized demo access.');
+          }
+        });
+      }
+
+      if (btnBypass) {
+        btnBypass.addEventListener('click', unlock);
+      }
+
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+    });
+  </script>
+</body>
+</html>

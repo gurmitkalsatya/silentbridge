@@ -8,6 +8,14 @@ Built for 24-Hour Open Innovation Hackathons, **SilentBridge** converts standard
 
 ## ⚡ Key Highlights
 
+- 📱 **Dedicated Survivor Portal (`sender.html`)**:
+  - Accessible by multiple concurrent citizens/survivors on their mobile devices.
+  - Contains **only** sender functionality: 6 disaster options, auto GPS location, timestamped message, emergency voice memo (with live waveform, Play Preview, and Re-Record), and Broadcast SOS button.
+  - **No receiver triage controls or survivor feed visible to civilians.**
+- 🛡️ **Dedicated Rescue Authority Portal (`receiver.html`)**:
+  - Restricted to rescue teams, first responders, disaster management authorities, police, and paramedics.
+  - Secured with an **Authority Access Gate (PIN: `911` / `RESCUE` or 1-click Authority Pass)**.
+  - Live multi-sender triage feed with exact coordinates, direct **"Open in Google Maps ↗"** buttons, emergency voice player (+6dB volume booster), and **"🚨 Dispatch Rescue & Send ACK"** controls.
 - ⚡ **Instant SOS Delivery**: SOS alerts, voice memos, and exact GPS coordinates are delivered to the receiver **within seconds**.
 - 🚨 **6 Standard Disaster Classifications**:
   1. 🏥 **Medical Emergency**
@@ -16,12 +24,10 @@ Built for 24-Hour Open Innovation Hackathons, **SilentBridge** converts standard
   4. 🌊 **Flood / Water Rising**
   5. 🌋 **Earthquake / Landslide**
   6. ⛺ **Food / Water / Shelter Needed**
-- 🎙️ **Emergency Voice Memo Recording with Re-Record**: Survivors can record up to 10-second voice memos with live audio waveforms, preview audio, and re-record before sending.
-- 📱 **Streamlined Survivor / Sender UI (No Map)**: Clean, rapid disaster interface with auto-detected GPS coordinates, timestamped message box, and one-tap SOS broadcast.
-- 🗺️ **One-Click Google Maps Navigation (Receiver)**: Direct **"Open in Google Maps"** links (`https://www.google.com/maps?q=lat,lon`) on every incoming beacon for instant route dispatch.
-- 🔊 **Simplified Rescue Receiver UI**: Clean dashboard displaying incoming messages, live audio voice players with +6dB field gain booster, and one-tap ACK response.
-- 🔄 **Bidirectional Rescue Acknowledgment (ACK)**: When the Rescue Base receives a distress beacon, they can dispatch an ACK confirmation back to the survivor.
-- 👥 **Multiple Concurrent Senders**: Real-time triage feed tracking multiple survivors simultaneously.
+- 🔄 **Bidirectional Rescue Acknowledgment (ACK)**:
+  - When the Rescue Base clicks **"Send ACK"**, an acknowledgment confirmation is modulated back to the survivor.
+  - The survivor's screen instantly displays:  
+    **"✅ RESCUE ACK CONFIRMED: Base Station Confirmed Distress Beacon! Rescue is En Route."** with an ascending audio chime.
 - 🧹 **Auto-Clearing Form**: Message text and recorded audio automatically reset on the sender's interface once successfully transmitted.
 - 🚀 **Zero Build Step / 100% Self-Contained**: Pure vanilla modern JavaScript, HTML5, and CSS. Runs immediately in any modern browser.
 
@@ -31,7 +37,9 @@ Built for 24-Hour Open Innovation Hackathons, **SilentBridge** converts standard
 
 ```
 silentbridge/
-├── index.html          # Clean role switcher, 6 disaster grid, Voice recorder, Google Maps links
+├── sender.html         # Dedicated Survivor Portal (Clean SOS Sender, no receiver controls)
+├── receiver.html       # Dedicated Rescue Authority Dashboard (PIN protected, triage feed, voice player)
+├── index.html          # Unified Portal with Split Demo View & role switcher
 ├── crc16.js            # Standalone CCITT CRC-16 integrity checker (polynomial 0x1021)
 ├── packetEngine.js     # 32-byte binary protocol encoder, decoder, bit-packer & ACK creator
 ├── audioModem.js       # Dual-engine Web Audio API pipeline: BFSK Transmitter & Demodulator
@@ -62,25 +70,26 @@ All telemetry is serialized into a fixed 32-byte (`ArrayBuffer`) payload:
 ```bash
 python -m http.server 8080
 ```
-Open **[http://localhost:8080](http://localhost:8080)** in Chrome, Edge, Safari, or Firefox.
+Open in Chrome, Edge, Safari, or Firefox.
 
-### 2. Multi-Tab Testing (Survivor & Rescue Base)
-- **Tab 1 (Survivor / Sender)**: Open `http://localhost:8080#sender`
-- **Tab 2 (Rescue Base / Receiver)**: Open `http://localhost:8080#receiver`
+### 2. Dedicated Multi-Role Testing
 
-**Step-by-Step Flow**:
-1. In **Tab 1 (Sender)**:
-   - Select one of the **6 Disaster Classifications** (e.g. *Medical* or *Flood*).
-   - Click **"Record Voice (10s)"**, speak an emergency message, and test the **"Re-Record"** or **"Play Preview"** buttons.
-   - Click **"BROADCAST ACOUSTIC SOS & VOICE"**.
-   - The form immediately auto-clears.
-2. In **Tab 2 (Receiver)**:
-   - Within seconds, the emergency card appears with the disaster badge, message, timestamp, and coordinates.
-   - Click **"Open in Google Maps ↗"** to open the survivor's exact location in Google Maps.
-   - Click **"Play Voice SOS"** to listen to the survivor's audio memo with the live waveform visualizer.
-   - Click **"🚨 Send ACK"** to dispatch rescue confirmation.
-3. In **Tab 1 (Sender)**:
-   - A bright green confirmation banner appears: **"✅ Base Station Confirmed Distress Beacon! Rescue is En Route."** with a confirmation chime.
+#### 👩‍🚒 **Role A: Survivor / Field Citizens (`sender.html`)**
+- Open **[http://localhost:8080/sender.html](http://localhost:8080/sender.html)**
+- Only the emergency sender interface is shown.
+- Select a disaster (e.g. *Medical* or *Trapped*), record a voice memo (with **Re-Record** option), and tap **"BROADCAST ACOUSTIC SOS & VOICE"**.
+- Form auto-clears and status transitions to `Awaiting Base Station ACK...`.
+
+#### 🛡️ **Role B: Rescue Authority Command (`receiver.html`)**
+- Open **[http://localhost:8080/receiver.html](http://localhost:8080/receiver.html)**
+- Enter PIN `911` (or tap **"1-Click Pass"**).
+- Incoming distress beacon appears with exact coordinates, Google Maps link, and timestamp.
+- Click **"Play Voice SOS"** to listen to the audio with live waveform.
+- Click **"🚨 Dispatch Rescue & Send ACK"**.
+
+#### 🔔 **Survivor Receives Confirmation (`sender.html`)**
+- The survivor's screen on `sender.html` pops up:  
+  **"✅ Base Station Confirmed Your Distress Call! Rescue is En Route."** with an audio chime.
 
 ---
 

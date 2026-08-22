@@ -146,6 +146,16 @@
   }
 
   function initRoleFromHash() {
+    const pathname = window.location.pathname.toLowerCase();
+    if (pathname.endsWith('sender.html')) {
+      AppState.currentRole = 'sender';
+      return;
+    }
+    if (pathname.endsWith('receiver.html')) {
+      AppState.currentRole = 'receiver';
+      return;
+    }
+
     const hash = window.location.hash.replace('#', '').toLowerCase();
     if (hash === 'sender' || hash === 'receiver' || hash === 'mesh') {
       setRole(hash);
