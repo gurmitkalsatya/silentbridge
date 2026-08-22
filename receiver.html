@@ -158,87 +158,41 @@
   <!-- Main Container -->
   <main class="flex-1 max-w-5xl w-full mx-auto p-3 sm:p-5 flex flex-col gap-5">
 
-    <!-- 1. FULL AUTHENTICATION MODAL (SIGN IN / SIGN UP) -->
+    <!-- 1. RESCUE HQ ACCESS CODE GATE (PASSWORD: admin@321) -->
     <div id="authorityLockGate" class="p-6 sm:p-8 rounded-3xl bg-tactical-900/95 border border-tactical-border shadow-2xl max-w-md mx-auto my-8 w-full backdrop-blur-xl">
       
       <!-- Security Icon Header -->
       <div class="text-center mb-6">
         <div class="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 text-white flex items-center justify-center mx-auto mb-3 shadow-inner">
-          <i data-lucide="lock" class="w-7 h-7"></i>
+          <i data-lucide="shield-check" class="w-7 h-7 text-white"></i>
         </div>
-        <h2 class="text-xl font-extrabold text-white uppercase tracking-wider font-mono">Rescue Authority Portal</h2>
-        <p class="text-xs text-slate-400 font-mono mt-1">Authorized personnel only. Please sign in or register.</p>
+        <h2 class="text-xl font-extrabold text-white uppercase tracking-wider font-mono">Rescue Command Portal</h2>
+        <p class="text-xs text-slate-400 font-mono mt-1">Authorized personnel only. Enter access password to proceed.</p>
       </div>
 
-      <!-- Auth Tabs: Sign In vs Sign Up -->
-      <div class="flex bg-tactical-950 rounded-xl p-1 border border-tactical-border mb-5 text-xs font-mono">
-        <button type="button" id="tabBtnSignIn" class="flex-1 py-2 rounded-lg font-bold transition-all bg-white text-slate-950 shadow-md">
-          Sign In
-        </button>
-        <button type="button" id="tabBtnSignUp" class="flex-1 py-2 rounded-lg font-bold transition-all text-slate-400 hover:text-white">
-          Sign Up / Register
-        </button>
-      </div>
-
-      <!-- FORM 1: SIGN IN -->
-      <form id="formSignIn" class="space-y-4 font-mono text-xs">
+      <!-- SINGLE PASSWORD FORM -->
+      <form id="formRescueAuth" class="space-y-4 font-mono text-xs">
         <div>
-          <label class="block text-slate-300 font-bold mb-1">OFFICER ID OR EMAIL</label>
-          <input type="text" id="signInEmail" placeholder="e.g. commander@rescue.org" value="commander@rescue.org" class="w-full bg-tactical-950 border border-tactical-border rounded-xl px-4 py-3 text-white focus:border-white focus:outline-none transition-colors shadow-inner" required>
+          <label class="block text-slate-300 font-bold mb-1">RESCUE ACCESS PASSWORD</label>
+          <div class="relative">
+            <input type="password" id="rescueAccessPassword" placeholder="Enter password..." class="w-full bg-tactical-950 border border-tactical-border rounded-xl px-4 py-3 pr-10 text-white focus:border-white focus:outline-none transition-colors shadow-inner" required autofocus>
+            <button type="button" id="btnTogglePassVisibility" class="absolute right-3.5 top-3.5 text-slate-400 hover:text-white">
+              <i data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+          </div>
         </div>
 
-        <div>
-          <label class="block text-slate-300 font-bold mb-1">PASSWORD</label>
-          <input type="password" id="signInPassword" placeholder="Enter password" value="rescue911" class="w-full bg-tactical-950 border border-tactical-border rounded-xl px-4 py-3 text-white focus:border-white focus:outline-none transition-colors shadow-inner" required>
-        </div>
-
-        <div class="flex items-center justify-between text-[11px] text-slate-400">
-          <label class="flex items-center gap-1.5 cursor-pointer">
-            <input type="checkbox" id="rememberMe" checked class="rounded border-slate-700 bg-tactical-950 text-white focus:ring-0">
-            <span>Remember credentials</span>
-          </label>
-          <span class="text-emerald-400">Offline Verified ✓</span>
+        <div id="authErrorMessage" class="hidden p-2.5 rounded-xl bg-red-950/80 border border-red-500/50 text-red-300 text-xs font-bold text-center">
+          Access Denied: Invalid Password.
         </div>
 
         <button type="submit" class="w-full py-3.5 px-4 rounded-xl bg-white hover:bg-slate-200 text-slate-950 font-extrabold text-sm tracking-wide uppercase transition-all shadow-lg shadow-white/10 active:scale-[0.99]">
-          SIGN IN TO COMMAND
+          UNLOCK RESCUE COMMAND
         </button>
 
         <button type="button" id="btnQuickDemoPass" class="w-full py-2.5 px-4 rounded-xl bg-tactical-800 hover:bg-tactical-700 text-slate-300 border border-tactical-border font-bold text-xs flex items-center justify-center gap-1.5">
-          <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-400"></i>
-          <span>1-Click Demo Login</span>
-        </button>
-      </form>
-
-      <!-- FORM 2: SIGN UP / REGISTER -->
-      <form id="formSignUp" class="hidden space-y-4 font-mono text-xs">
-        <div>
-          <label class="block text-slate-300 font-bold mb-1">OFFICER FULL NAME</label>
-          <input type="text" id="signUpName" placeholder="e.g. Captain Marcus Vance" class="w-full bg-tactical-950 border border-tactical-border rounded-xl px-4 py-3 text-white focus:border-white focus:outline-none transition-colors shadow-inner" required>
-        </div>
-
-        <div>
-          <label class="block text-slate-300 font-bold mb-1">RESCUE AGENCY / BADGE ID</label>
-          <input type="text" id="signUpBadge" placeholder="e.g. National Disaster Relief // #NDR-404" class="w-full bg-tactical-950 border border-tactical-border rounded-xl px-4 py-3 text-white focus:border-white focus:outline-none transition-colors shadow-inner" required>
-        </div>
-
-        <div>
-          <label class="block text-slate-300 font-bold mb-1">OFFICER EMAIL</label>
-          <input type="email" id="signUpEmail" placeholder="e.g. officer@rescue.org" class="w-full bg-tactical-950 border border-tactical-border rounded-xl px-4 py-3 text-white focus:border-white focus:outline-none transition-colors shadow-inner" required>
-        </div>
-
-        <div>
-          <label class="block text-slate-300 font-bold mb-1">CREATE PASSWORD</label>
-          <input type="password" id="signUpPassword" placeholder="Create strong password" class="w-full bg-tactical-950 border border-tactical-border rounded-xl px-4 py-3 text-white focus:border-white focus:outline-none transition-colors shadow-inner" required>
-        </div>
-
-        <div>
-          <label class="block text-slate-300 font-bold mb-1">CONFIRM PASSWORD</label>
-          <input type="password" id="signUpConfirmPassword" placeholder="Repeat password" class="w-full bg-tactical-950 border border-tactical-border rounded-xl px-4 py-3 text-white focus:border-white focus:outline-none transition-colors shadow-inner" required>
-        </div>
-
-        <button type="submit" class="w-full py-3.5 px-4 rounded-xl bg-white hover:bg-slate-200 text-slate-950 font-extrabold text-sm tracking-wide uppercase transition-all shadow-lg shadow-white/10 active:scale-[0.99]">
-          REGISTER RESCUE ACCOUNT
+          <i data-lucide="key" class="w-3.5 h-3.5 text-amber-400"></i>
+          <span>Autofill Password (admin@321)</span>
         </button>
       </form>
 
@@ -377,26 +331,15 @@
   <script src="app.js"></script>
 
   <script>
-    // Tab switching & auth event bindings
     document.addEventListener('DOMContentLoaded', () => {
-      const tabSignIn = document.getElementById('tabBtnSignIn');
-      const tabSignUp = document.getElementById('tabBtnSignUp');
-      const formSignIn = document.getElementById('formSignIn');
-      const formSignUp = document.getElementById('formSignUp');
-
-      if (tabSignIn && tabSignUp && formSignIn && formSignUp) {
-        tabSignIn.addEventListener('click', () => {
-          tabSignIn.className = 'flex-1 py-2 rounded-lg font-bold transition-all bg-white text-slate-950 shadow-md';
-          tabSignUp.className = 'flex-1 py-2 rounded-lg font-bold transition-all text-slate-400 hover:text-white';
-          formSignIn.classList.remove('hidden');
-          formSignUp.classList.add('hidden');
-        });
-
-        tabSignUp.addEventListener('click', () => {
-          tabSignUp.className = 'flex-1 py-2 rounded-lg font-bold transition-all bg-white text-slate-950 shadow-md';
-          tabSignIn.className = 'flex-1 py-2 rounded-lg font-bold transition-all text-slate-400 hover:text-white';
-          formSignUp.classList.remove('hidden');
-          formSignIn.classList.add('hidden');
+      const btnToggle = document.getElementById('btnTogglePassVisibility');
+      const passInput = document.getElementById('rescueAccessPassword');
+      if (btnToggle && passInput) {
+        btnToggle.addEventListener('click', () => {
+          const isPass = passInput.type === 'password';
+          passInput.type = isPass ? 'text' : 'password';
+          btnToggle.innerHTML = isPass ? '<i data-lucide="eye-off" class="w-4 h-4"></i>' : '<i data-lucide="eye" class="w-4 h-4"></i>';
+          if (window.lucide) window.lucide.createIcons();
         });
       }
 

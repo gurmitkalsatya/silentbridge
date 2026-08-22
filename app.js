@@ -177,21 +177,13 @@
     }
   ];
 
-  function getSavedOfficers() {
-    try {
-      const data = localStorage.getItem('silentbridge_officers');
-      if (data) return JSON.parse(data);
-    } catch (e) {}
-    return DEFAULT_OFFICERS;
-  }
+  /* -------------------------------------------------------------------------- */
+  /*                 RESCUE HQ AUTHENTICATION (PASSWORD: admin@321)             */
+  /* -------------------------------------------------------------------------- */
 
-  function saveOfficers(officers) {
-    try {
-      localStorage.setItem('silentbridge_officers', JSON.stringify(officers));
-    } catch (e) {}
-  }
+  const MASTER_RESCUE_PASSWORD = 'admin@321';
 
-  function unlockRescueDashboard(officer) {
+  function unlockRescueDashboard() {
     const lockGate = document.getElementById('authorityLockGate');
     const dashboard = document.getElementById('authorityDashboard');
     const subBar = document.getElementById('dashboardSubBar');
@@ -203,11 +195,11 @@
     if (dashboard) dashboard.classList.remove('hidden');
     if (subBar) subBar.classList.remove('hidden');
     if (profile) profile.classList.remove('hidden');
-    if (badgeName) badgeName.textContent = officer.name || 'Officer';
-    if (deptLabel) deptLabel.textContent = (officer.badge || 'TACTICAL COMMAND').toUpperCase();
+    if (badgeName) badgeName.textContent = 'Command Officer';
+    if (deptLabel) deptLabel.textContent = 'HQ TACTICAL COMMAND';
 
     try {
-      sessionStorage.setItem('silentbridge_active_officer', JSON.stringify(officer));
+      sessionStorage.setItem('silentbridge_rescue_unlocked', 'true');
     } catch (e) {}
 
     if (window.lucide) window.lucide.createIcons();
@@ -218,15 +210,18 @@
     const dashboard = document.getElementById('authorityDashboard');
     const subBar = document.getElementById('dashboardSubBar');
     const profile = document.getElementById('officerHeaderProfile');
+    const passInput = document.getElementById('rescueAccessPassword');
+    const authErr = document.getElementById('authErrorMessage');
 
     if (lockGate) lockGate.classList.remove('hidden');
     if (dashboard) dashboard.classList.add('hidden');
     if (subBar) subBar.classList.add('hidden');
     if (profile) profile.classList.add('hidden');
+    if (passInput) passInput.value = '';
+    if (authErr) authErr.classList.add('hidden');
 
     try {
-      sessionStorage.removeItem('silentbridge_active_officer');
-      localStorage.removeItem('silentbridge_remembered_officer');
+      sessionStorage.removeItem('silentbridge_rescue_unlocked');
     } catch (e) {}
 
     if (window.lucide) window.lucide.createIcons();
@@ -234,71 +229,43 @@
 
   function initRescueAuth() {
     try {
-      const active = sessionStorage.getItem('silentbridge_active_officer') || localStorage.getItem('silentbridge_remembered_officer');
-      if (active) {
-        unlockRescueDashboard(JSON.parse(active));
+      if (sessionStorage.getItem('silentbridge_rescue_unlocked') === 'true') {
+        unlockRescueDashboard();
       }
     } catch (e) {}
 
-    const formSignIn = document.getElementById('formSignIn');
-    const formSignUp = document.getElementById('formSignUp');
+    const formAuth = document.getElementById('formRescueAuth');
+    const passInput = document.getElementById('rescueAccessPassword');
+    const authErr = document.getElementById('authErrorMessage');
     const btnDemoPass = document.getElementById('btnQuickDemoPass');
     const btnLogOut = document.getElementById('btnLogOut');
 
-    if (formSignIn) {
-      formSignIn.addEventListener('submit', (e) => {
+    if (formAuth) {
+      formAuth.addEventListener('submit', (e) => {
         e.preventDefault();
-        const email = document.getElementById('signInEmail').value.trim().toLowerCase();
-        const password = document.getElementById('signInPassword').value;
-        const remember = document.getElementById('rememberMe')?.checked;
+        const entered = passInput ? passInput.value.trim() : '';
 
-        const officers = getSavedOfficers();
-        const matched = officers.find(o => o.email.toLowerCase() === email && o.password === password);
-
-        if (matched) {
-          if (remember) {
-            try { localStorage.setItem('silentbridge_remembered_officer', JSON.stringify(matched)); } catch (e) {}
-          }
-          unlockRescueDashboard(matched);
+        if (entered === MASTER_RESCUE_PASSWORD) {
+          if (authErr) authErr.classList.add('hidden');
+          unlockRescueDashboard();
         } else {
-          alert('Invalid Officer Email or Password.\n\nUse: commander@rescue.org / rescue911, or click "1-Click Demo Login".');
+          if (authErr) {
+            authErr.textContent = 'Access Denied: Invalid Password.';
+            authErr.classList.remove('hidden');
+          }
+          if (passInput) {
+            passInput.focus();
+            passInput.select();
+          }
         }
-      });
-    }
-
-    if (formSignUp) {
-      formSignUp.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const name = document.getElementById('signUpName').value.trim();
-        const badge = document.getElementById('signUpBadge').value.trim();
-        const email = document.getElementById('signUpEmail').value.trim().toLowerCase();
-        const password = document.getElementById('signUpPassword').value;
-        const confirmPassword = document.getElementById('signUpConfirmPassword').value;
-
-        if (password !== confirmPassword) {
-          alert('Passwords do not match. Please verify.');
-          return;
-        }
-
-        const officers = getSavedOfficers();
-        if (officers.some(o => o.email.toLowerCase() === email)) {
-          alert('An officer account with this email already exists. Please Sign In.');
-          return;
-        }
-
-        const newOfficer = { name, badge, email, password };
-        officers.push(newOfficer);
-        saveOfficers(officers);
-
-        alert(`Account created successfully for ${name}!\nLogging in now...`);
-        unlockRescueDashboard(newOfficer);
       });
     }
 
     if (btnDemoPass) {
       btnDemoPass.addEventListener('click', () => {
-        const demoOfficer = DEFAULT_OFFICERS[0];
-        unlockRescueDashboard(demoOfficer);
+        if (passInput) passInput.value = MASTER_RESCUE_PASSWORD;
+        if (authErr) authErr.classList.add('hidden');
+        unlockRescueDashboard();
       });
     }
 
@@ -991,7 +958,7 @@
       return { score: 100, label: 'MANUALLY VERIFIED ✓', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', icon: 'shield-check' };
     }
     if (pkt.isFalseAlarm) {
-      return { score: 0, label: 'HOAX / FALSE ALARM FLAGGED', badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/40', icon: 'alert-triangle' };
+      return { score: 10, label: 'AUTO-FLAGGED: FALSE ALARM', badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/40', icon: 'alert-triangle' };
     }
 
     let score = 15; // Base score
@@ -1027,6 +994,7 @@
       packet.isManuallyVerified = true;
       packet.isFalseAlarm = false;
       renderEmergencyFeeds();
+      playEmergencySiren();
     }
   }
 
@@ -1035,6 +1003,7 @@
     if (packet) {
       packet.isFalseAlarm = true;
       packet.isManuallyVerified = false;
+      packet.autoFlaggedReason = 'Manually Flagged as False Alarm / Hoax by Officer';
       renderEmergencyFeeds();
     }
   }
@@ -1068,7 +1037,7 @@
         pkt.deviceId = devId;
 
         return `
-          <div class="p-4 sm:p-5 rounded-2xl border ${pkt.isFalseAlarm ? 'border-amber-500/60 bg-amber-950/10' : meta.bgClass} bg-tactical-900/95 shadow-xl transition-all hover:border-slate-500 relative" id="card_${pkt.messageId}">
+          <div class="p-4 sm:p-5 rounded-2xl border ${pkt.isFalseAlarm ? 'border-amber-500/80 bg-amber-950/20' : meta.bgClass} bg-tactical-900/95 shadow-xl transition-all hover:border-slate-500 relative" id="card_${pkt.messageId}">
             
             <!-- Top Line: Disaster Badge, Trust Score, Device ID & Timestamp -->
             <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
@@ -1096,6 +1065,18 @@
               </div>
             </div>
 
+            <!-- AUTOMATIC FALSE ALARM WARNING BANNER (If Auto-Identified) -->
+            ${pkt.isFalseAlarm ? `
+              <div class="bg-amber-950/60 border border-amber-500/60 rounded-xl p-3 mb-3 text-xs font-mono text-amber-200 flex items-start gap-2.5 shadow-inner">
+                <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-400 shrink-0 mt-0.5"></i>
+                <div>
+                  <div class="font-extrabold text-amber-300 uppercase tracking-wide">⚠️ AUTOMATICALLY IDENTIFIED AS POTENTIAL FALSE ALARM</div>
+                  <div class="text-[11px] text-amber-200/90 mt-0.5">Reason: <strong>${pkt.autoFlaggedReason || 'No Voice Memo SOS Attached (Acoustic Verification Failed)'}</strong></div>
+                  <div class="text-[10px] text-slate-400 mt-1">Siren automatically muted. You can override and verify if genuine or block the sender below.</div>
+                </div>
+              </div>
+            ` : ''}
+
             <!-- Message & Voice Tag -->
             <div class="text-base font-mono font-extrabold text-white mb-3 tracking-wide flex flex-wrap items-center justify-between gap-2">
               <span>"${pkt.message}"</span>
@@ -1103,7 +1084,11 @@
                 <span class="px-2.5 py-1 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40 text-xs flex items-center gap-1 font-bold">
                   <i data-lucide="mic" class="w-3.5 h-3.5"></i> VOICE SOS ATTACHED
                 </span>
-              ` : ''}
+              ` : `
+                <span class="px-2.5 py-1 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs flex items-center gap-1 font-bold">
+                  <i data-lucide="mic-off" class="w-3.5 h-3.5"></i> NO VOICE SOS (UNVERIFIED)
+                </span>
+              `}
             </div>
 
             <!-- Exact Location & Google Maps Link -->
@@ -1137,12 +1122,15 @@
                 </button>
 
                 <!-- Anti-Misuse Triage Controls -->
-                <button type="button" class="btn-verify-beacon text-xs px-2.5 py-1.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/40 font-mono font-bold flex items-center gap-1" data-msgid="${pkt.messageId}" title="Manually verify distress beacon">
-                  <i data-lucide="check" class="w-3 h-3"></i> Verify
-                </button>
-                <button type="button" class="btn-flag-false text-xs px-2.5 py-1.5 rounded-xl bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-500/40 font-mono font-bold flex items-center gap-1" data-msgid="${pkt.messageId}" title="Flag as Hoax / False Alarm">
-                  <i data-lucide="flag" class="w-3 h-3"></i> False Alarm
-                </button>
+                ${pkt.isFalseAlarm ? `
+                  <button type="button" class="btn-verify-beacon text-xs px-2.5 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/50 font-mono font-bold flex items-center gap-1 shadow-sm" data-msgid="${pkt.messageId}" title="Override false alarm and mark as verified emergency">
+                    <i data-lucide="check" class="w-3.5 h-3.5"></i> Override & Verify
+                  </button>
+                ` : `
+                  <button type="button" class="btn-flag-false text-xs px-2.5 py-1.5 rounded-xl bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-500/40 font-mono font-bold flex items-center gap-1" data-msgid="${pkt.messageId}" title="Flag as Hoax / False Alarm">
+                    <i data-lucide="flag" class="w-3 h-3"></i> False Alarm
+                  </button>
+                `}
                 <button type="button" class="btn-block-dev text-xs px-2.5 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-500/40 font-mono font-bold flex items-center gap-1" data-devid="${devId}" title="Blacklist and Block this rogue device">
                   <i data-lucide="ban" class="w-3 h-3"></i> Block Device
                 </button>
@@ -1422,6 +1410,22 @@
       packet.hasVoice = false;
     }
 
+    // AUTOMATIC FALSE ALARM IDENTIFICATION & TRIAGE ENGINE:
+    // If NO voice memo SOS is attached, or if GPS is missing/invalid, auto-classify as potential false alarm
+    const hasValidGps = (packet.latitude !== 0 || packet.longitude !== 0) && Math.abs(packet.latitude) <= 90 && Math.abs(packet.longitude) <= 180;
+    
+    if (!packet.hasVoice || !hasValidGps) {
+      packet.isFalseAlarm = true;
+      packet.autoFlagged = true;
+      packet.autoFlaggedReason = !packet.hasVoice 
+        ? 'No Voice SOS Memo Attached (Acoustic Verification Failed)'
+        : 'Missing / Invalid Satellite GPS Coordinates';
+      console.warn(`[SilentBridge Triage] ⚠️ Auto-Flagged Potential False Alarm on Beacon #${packet.messageId}: ${packet.autoFlaggedReason}`);
+    } else {
+      packet.isFalseAlarm = false;
+      packet.isVerified = true;
+    }
+
     AppState.stats.rxCount++;
     const rxCountEl = document.getElementById('statRxCount');
     if (rxCountEl) rxCountEl.textContent = AppState.stats.rxCount;
@@ -1430,8 +1434,30 @@
     renderEmergencyFeeds();
     setActiveVoiceDispatch(packet);
 
-    // 🚨 Blow Authentic Emergency Rescue Siren on Receiver
-    playEmergencySiren();
+    // 🚨 Sound Siren ONLY for legitimate verified emergency beacons (Mute siren for auto-flagged false alarms)
+    if (!packet.isFalseAlarm) {
+      playEmergencySiren();
+    } else {
+      playMutedFalseAlarmBeep();
+    }
+  }
+
+  function playMutedFalseAlarmBeep() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.15);
+    } catch (e) {}
   }
 
   /* -------------------------------------------------------------------------- */
@@ -1843,26 +1869,27 @@
     if (btnSim) {
       btnSim.addEventListener('click', () => {
         const randomSenders = [
-          { dLat: 0.008, dLon: -0.005, msg: 'TRAPPED BASEMENT', type: 2 },
-          { dLat: -0.012, dLon: 0.009, msg: 'FLOOD RISING FL2', type: 4 },
-          { dLat: 0.015, dLon: 0.012, msg: 'MEDIC NEEDED', type: 1 },
-          { dLat: -0.006, dLon: -0.008, msg: 'LANDSLIDE COLLAPSE', type: 5 },
-          { dLat: 0.004, dLon: 0.003, msg: 'FIRE IN 3RD FLOOR', type: 3 },
-          { dLat: -0.009, dLon: 0.002, msg: 'SHELTER 20 PEOPLE', type: 6 }
+          { dLat: 0.008, dLon: -0.005, msg: 'TRAPPED BASEMENT', type: 2, attachVoice: true },
+          { dLat: -0.012, dLon: 0.009, msg: 'FLOOD RISING FL2', type: 4, attachVoice: true },
+          { dLat: 0.015, dLon: 0.012, msg: 'MEDIC NEEDED', type: 1, attachVoice: true },
+          { dLat: 0.000, dLon: 0.000, msg: 'TEST HOAX / FAKE', type: 6, attachVoice: false },
+          { dLat: -0.006, dLon: -0.008, msg: 'LANDSLIDE COLLAPSE', type: 5, attachVoice: true },
+          { dLat: 0.004, dLon: 0.003, msg: 'FIRE IN 3RD FLOOR', type: 3, attachVoice: true },
+          { dLat: 0.000, dLon: 0.000, msg: 'NO VOICE SPAM', type: 1, attachVoice: false }
         ];
         const sample = randomSenders[Math.floor(Math.random() * randomSenders.length)];
         const simPacket = PacketEngine.createPacket({
           distressType: sample.type,
-          latitude: AppState.currentLat + sample.dLat,
-          longitude: AppState.currentLon + sample.dLon,
+          latitude: sample.attachVoice ? AppState.currentLat + sample.dLat : 0.0,
+          longitude: sample.attachVoice ? AppState.currentLon + sample.dLon : 0.0,
           message: sample.msg,
           ttl: 2
         });
         const parsed = PacketEngine.parsePacket(simPacket);
-        handleIncomingPacket(parsed, {
+        handleIncomingPacket(parsed, sample.attachVoice ? {
           dataUrl: AppState.voice.dataUrl,
           duration: AppState.voice.durationSeconds || 3.0
-        });
+        } : null);
       });
     }
 
