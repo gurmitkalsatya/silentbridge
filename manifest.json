@@ -1,0 +1,17 @@
+{
+  "name": "SilentBridge Offline SOS",
+  "short_name": "SilentBridge",
+  "description": "Zero-infrastructure offline acoustic emergency mesh communicator operating without cellular towers, Wi-Fi, or internet.",
+  "start_url": "./sender.html",
+  "display": "standalone",
+  "background_color": "#07090E",
+  "theme_color": "#07090E",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='128' fill='%2307090E'/%3E%3Cpath d='M256 96 A160 160 0 0 1 416 256 A160 160 0 0 1 256 416 A160 160 0 0 1 96 256 A160 160 0 0 1 256 96 Z' fill='none' stroke='%23EF4444' stroke-width='32'/%3E%3Ccircle cx='256' cy='256' r='48' fill='%23EF4444'/%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
