@@ -1045,9 +1045,9 @@
         pkt.deviceId = devId;
 
         return `
-          <div class="p-4 sm:p-5 rounded-2xl border-2 ${pkt.isFalseAlarm ? 'border-amber-400 bg-amber-50/70' : 'border-purple-200 bg-white'} shadow-md transition-all hover:shadow-xl hover:border-purple-400 relative" id="card_${pkt.messageId}">
+          <div class="p-4 sm:p-5 rounded-2xl border-2 ${pkt.isAcknowledged ? 'border-emerald-400 bg-emerald-50/50' : (pkt.isFalseAlarm ? 'border-amber-400 bg-amber-50/70' : 'border-purple-200 bg-white')} shadow-md transition-all hover:shadow-xl hover:border-purple-400 relative" id="card_${pkt.messageId}">
             
-            <!-- Top Line: Disaster Badge, Trust Score, Device ID & Timestamp -->
+            <!-- Top Line: Disaster Badge, ACK Status / Trust Score, Device ID & Timestamp -->
             <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div class="flex flex-wrap items-center gap-2">
                 <span class="px-3 py-1 rounded-xl text-xs font-mono font-extrabold uppercase bg-purple-100 text-purple-950 border border-purple-300 flex items-center gap-1.5 shadow-sm">
@@ -1055,11 +1055,18 @@
                   ${meta.name}
                 </span>
 
-                <!-- Trust Score Pill -->
-                <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-mono font-extrabold uppercase bg-purple-50 text-purple-900 border border-purple-300 flex items-center gap-1">
-                  <i data-lucide="${trust.icon}" class="w-3 h-3 text-purple-600"></i>
-                  ${trust.label}
-                </span>
+                ${pkt.isAcknowledged ? `
+                  <span class="px-3 py-1 rounded-xl text-xs font-mono font-extrabold uppercase bg-emerald-100 text-emerald-950 border border-emerald-400 flex items-center gap-1.5 shadow-sm animate-pulse">
+                    <i data-lucide="check-check" class="w-4 h-4 text-emerald-700"></i>
+                    ✅ RESCUE TEAM EN ROUTE (ACK SENT)
+                  </span>
+                ` : `
+                  <!-- Trust Score Pill -->
+                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-mono font-extrabold uppercase bg-purple-50 text-purple-900 border border-purple-300 flex items-center gap-1">
+                    <i data-lucide="${trust.icon}" class="w-3 h-3 text-purple-600"></i>
+                    ${trust.label}
+                  </span>
+                `}
 
                 <span class="text-[10px] font-mono px-2 py-0.5 rounded-lg bg-slate-100 text-slate-800 border border-slate-300 font-bold">
                   🆔 ${devId}
@@ -1141,9 +1148,16 @@
                 <button type="button" class="btn-play-voice-card text-xs px-3 py-1.5 rounded-xl bg-purple-100 hover:bg-purple-200 text-slate-950 font-mono font-bold border border-purple-300 transition-all flex items-center gap-1.5 shadow-sm hover:scale-[1.02] active:scale-[0.98]" data-msgid="${pkt.messageId}">
                   <i data-lucide="play" class="w-3.5 h-3.5 text-purple-700"></i> Play Voice
                 </button>
-                <button type="button" class="btn-send-ack text-xs px-3 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-950 font-mono font-bold border border-emerald-300 transition-all flex items-center gap-1.5 shadow-sm hover:scale-[1.02] active:scale-[0.98]" data-msgid="${pkt.messageId}">
-                  <i data-lucide="check-check" class="w-3.5 h-3.5 text-emerald-700"></i> Dispatch & ACK
-                </button>
+
+                ${pkt.isAcknowledged ? `
+                  <span class="text-xs px-3.5 py-1.5 rounded-xl bg-emerald-100 text-emerald-950 font-mono font-extrabold border border-emerald-400 flex items-center gap-1.5 shadow-sm">
+                    <i data-lucide="check-check" class="w-3.5 h-3.5 text-emerald-700"></i> ACK Dispatched ✓
+                  </span>
+                ` : `
+                  <button type="button" class="btn-send-ack text-xs px-3 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-950 font-mono font-bold border border-emerald-300 transition-all flex items-center gap-1.5 shadow-sm hover:scale-[1.02] active:scale-[0.98]" data-msgid="${pkt.messageId}">
+                    <i data-lucide="check-check" class="w-3.5 h-3.5 text-emerald-700"></i> Dispatch & ACK
+                  </button>
+                `}
 
                 <!-- Anti-Misuse Triage Controls -->
                 ${pkt.isFalseAlarm ? `
@@ -1152,7 +1166,7 @@
                   </button>
                 ` : `
                   <button type="button" class="btn-flag-false text-xs px-2.5 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300 font-mono font-bold flex items-center gap-1 transition-all hover:scale-[1.02]" data-msgid="${pkt.messageId}" title="Flag as Hoax / False Alarm">
-                    <i data-lucide="flag" class="w-3 h-3 text-amber-700"></i> False Alarm
+                    <i data-lucide="flag" class="w-3.5 h-3.5 text-amber-700"></i> False Alarm
                   </button>
                 `}
                 <button type="button" class="btn-block-dev text-xs px-2.5 py-1.5 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-950 border border-rose-300 font-mono font-bold flex items-center gap-1 transition-all hover:scale-[1.02]" data-devid="${devId}" title="Blacklist and Block this rogue device">
@@ -1240,37 +1254,73 @@
     console.log(`[SilentBridge ACK] Instant dispatching rescue ACK for Message #${targetMessageId}`);
     const ackPacket = PacketEngine.createAckPacket(targetMessageId, 'RESCUE EN ROUTE');
 
+    // 1. Mark beacon in state as acknowledged immediately
+    const numId = parseInt(targetMessageId, 10);
+    const pkt = AppState.receivedPackets.find(p => p.messageId === numId || p.sessionId === targetMessageId);
+    if (pkt) {
+      pkt.isAcknowledged = true;
+      pkt.status = 'DISPATCHED & ACKNOWLEDGED';
+      pkt.acknowledgedAt = Date.now();
+    }
+
+    // 2. Silence Siren and immediately re-render feed to reflect fresh ACK state
+    silenceEmergencySiren();
+    renderEmergencyFeeds();
+    persistDistressPackets();
+
     try {
-      // 1. Instant Acoustic Audio Transmission
+      // 3. Instant Acoustic Audio Transmission
       if (AppState.audioModem) {
         AppState.audioModem.transmitPacket(ackPacket).catch(() => {});
       }
 
-      // 2. Instant Local BroadcastChannel Sync (< 1ms)
+      // 4. Instant Local BroadcastChannel Sync (< 1ms)
       if (AppState.syncChannel) {
         try {
           AppState.syncChannel.postMessage({
             type: 'ACK_BROADCAST',
+            target_message_id: targetMessageId,
             targetMessageId: targetMessageId,
             timestamp: Date.now()
           });
         } catch (e) {}
       }
 
-      // 3. Instant LocalStorage Event Sync (< 2ms)
+      // 5. Instant LocalStorage Event Sync (< 2ms)
       try {
         localStorage.setItem('silentbridge_last_ack_event', JSON.stringify({
+          target_message_id: targetMessageId,
           targetMessageId: targetMessageId,
           timestamp: Date.now(),
           nonce: Math.random()
         }));
       } catch (e) {}
 
-      // 4. Instant Cloud Mesh WebSocket Broadcast (< 50ms)
+      // 6. REST API Relay POST /api/ack
+      try {
+        fetch('/api/ack', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target_message_id: targetMessageId, message: 'RESCUE TEAM EN ROUTE' })
+        }).catch(() => {});
+      } catch (e) {}
+
+      // 7. Instant Local WebSocket & Cloud Mesh Broadcast
+      if (AppState.localWs && AppState.localWs.readyState === WebSocket.OPEN) {
+        try {
+          AppState.localWs.send(JSON.stringify({
+            type: 'ACK_BROADCAST',
+            target_message_id: targetMessageId,
+            targetMessageId: targetMessageId,
+            timestamp: Date.now()
+          }));
+        } catch (e) {}
+      }
       if (AppState.cloudWs && AppState.cloudWs.readyState === WebSocket.OPEN) {
         try {
           AppState.cloudWs.send(JSON.stringify({
             type: 'ACK_BROADCAST',
+            target_message_id: targetMessageId,
             targetMessageId: targetMessageId,
             timestamp: Date.now()
           }));
@@ -1695,54 +1745,7 @@
       }
     } catch (e) {}
 
-    // If initial queue is empty, present live field distress beacons immediately (NO SIMULATE CLICK NEEDED)
-    if (AppState.receivedPackets.length === 0) {
-      const initialLiveBeacons = [
-        {
-          messageId: 4082,
-          distressType: 1,
-          distressMeta: { id: 1, name: 'Medical Emergency', icon: 'heart-pulse', color: 'red', priority: 'Critical' },
-          latitude: 37.775820,
-          longitude: -122.418290,
-          message: 'NEED MEDIC & OXYGEN',
-          ttl: 3,
-          timestamp: Date.now() - 25000,
-          timeString: '25s ago',
-          hasVoice: true,
-          voiceDuration: 3.5,
-          deviceId: 'DEV-MEDIC-01',
-          isVerified: true,
-          isFalseAlarm: false
-        },
-        {
-          messageId: 2194,
-          distressType: 4,
-          distressMeta: { id: 4, name: 'Flood / Water', icon: 'waves', color: 'blue', priority: 'High' },
-          latitude: 37.773410,
-          longitude: -122.421150,
-          message: 'WATER RISING RAPIDLY',
-          ttl: 3,
-          timestamp: Date.now() - 75000,
-          timeString: '1m ago',
-          hasVoice: false,
-          deviceId: 'DEV-FLOOD-04',
-          isVerified: true,
-          isFalseAlarm: false
-        }
-      ];
-
-      initialLiveBeacons.forEach(p => {
-        AppState.seenPacketIds.add(p.messageId);
-        AppState.receivedPackets.push(p);
-      });
-
-      AppState.stats.rxCount = AppState.receivedPackets.length;
-      const rxCountEl = document.getElementById('statRxCount');
-      if (rxCountEl) rxCountEl.textContent = AppState.stats.rxCount;
-      renderEmergencyFeeds();
-      setActiveVoiceDispatch(AppState.receivedPackets[0]);
-      persistDistressPackets();
-    }
+    renderEmergencyFeeds();
   }
 
   /* -------------------------------------------------------------------------- */
@@ -1854,10 +1857,19 @@
       const parsed = PacketEngine.parsePacket(rawBytes);
       if (parsed.valid) {
         parsed.deviceId = data.deviceId || getOrCreateDeviceId();
+        // Crucial: Preserve the exact typed message and distress type from event payload
+        if (data.message) {
+          parsed.message = data.message;
+        }
+        if (data.distressType) {
+          parsed.distressType = data.distressType;
+          parsed.distressMeta = PacketEngine.DISTRESS_TYPES[data.distressType] || parsed.distressMeta;
+        }
         handleIncomingPacket(parsed, {
           dataUrl: data.voiceDataUrl,
           duration: data.voiceDuration,
-          deviceId: data.deviceId
+          deviceId: data.deviceId,
+          message: data.message
         });
       }
     } else if (data.type === 'ACK_BROADCAST') {
@@ -1865,10 +1877,14 @@
     }
   }
 
-  function broadcastDistressCrossTab(packetBytes, voiceDataUrl, voiceDuration) {
+  function broadcastDistressCrossTab(packetBytes, voiceDataUrl, voiceDuration, extraMeta = {}) {
     const payload = {
       type: 'DISTRESS_BROADCAST',
       packetHex: PacketEngine.toHex(packetBytes, ''),
+      message: extraMeta.message || null,
+      distressType: extraMeta.distressType || null,
+      latitude: extraMeta.latitude || null,
+      longitude: extraMeta.longitude || null,
       voiceDataUrl: voiceDataUrl || null,
       voiceDuration: voiceDuration || 0,
       deviceId: getOrCreateDeviceId(),
@@ -2296,6 +2312,10 @@
     const messageId = PacketEngine.generateMessageId();
     AppState.lastSentMessageId = messageId;
 
+    const typedMsg = document.getElementById('senderInputMessage')?.value?.trim();
+    const finalMsg = payload.message || typedMsg || 'PANIC SOS: NEED RESCUE';
+    const distressType = payload.distressType || AppState.activeDistressType || 1;
+
     const trackingCard = document.getElementById('senderLiveTrackingCard');
     const statusText = document.getElementById('senderTrackingStatusText');
     const statusBadge = document.getElementById('senderTrackingBadge');
@@ -2320,10 +2340,10 @@
 
     const packetBytes = PacketEngine.createPacket({
       messageId: messageId,
-      distressType: payload.distressType || AppState.activeDistressType || 1,
+      distressType: distressType,
       latitude: AppState.currentLat,
       longitude: AppState.currentLon,
-      message: payload.message || 'PANIC SOS: NEED RESCUE',
+      message: finalMsg,
       ttl: 3
     });
 
@@ -2331,15 +2351,22 @@
     const voiceDuration = AppState.voice.durationSeconds;
 
     try {
-      broadcastDistressCrossTab(packetBytes, voiceDataUrl, voiceDuration);
+      broadcastDistressCrossTab(packetBytes, voiceDataUrl, voiceDuration, {
+        message: finalMsg,
+        distressType: distressType,
+        latitude: AppState.currentLat,
+        longitude: AppState.currentLon
+      });
 
       const parsed = PacketEngine.parsePacket(packetBytes);
       if (parsed.valid) {
         parsed.deviceId = getOrCreateDeviceId();
+        parsed.message = finalMsg; // Ensure full typed message is retained
         handleIncomingPacket(parsed, {
           dataUrl: voiceDataUrl,
           duration: voiceDuration,
-          deviceId: parsed.deviceId
+          deviceId: parsed.deviceId,
+          message: finalMsg
         });
       }
 
@@ -2365,7 +2392,8 @@
 
     const lat = parseFloat(latInput ? latInput.value : AppState.currentLat) || AppState.currentLat;
     const lon = parseFloat(lonInput ? lonInput.value : AppState.currentLon) || AppState.currentLon;
-    const msg = msgInput ? msgInput.value : (payload.message || 'NEED RESCUE ASAP');
+    const typedMsg = msgInput ? msgInput.value.trim() : '';
+    const finalMsg = payload.message || typedMsg || 'NEED RESCUE ASAP';
     const messageId = PacketEngine.generateMessageId();
     AppState.lastSentMessageId = messageId;
 
@@ -2396,7 +2424,7 @@
       distressType: AppState.activeDistressType,
       latitude: lat,
       longitude: lon,
-      message: msg,
+      message: finalMsg,
       ttl: 3
     });
 
@@ -2404,15 +2432,22 @@
     const voiceDuration = AppState.voice.durationSeconds;
 
     try {
-      broadcastDistressCrossTab(packetBytes, voiceDataUrl, voiceDuration);
+      broadcastDistressCrossTab(packetBytes, voiceDataUrl, voiceDuration, {
+        message: finalMsg,
+        distressType: AppState.activeDistressType,
+        latitude: lat,
+        longitude: lon
+      });
 
       const parsed = PacketEngine.parsePacket(packetBytes);
       if (parsed.valid) {
         parsed.deviceId = getOrCreateDeviceId();
+        parsed.message = finalMsg; // Ensure full typed message is retained
         handleIncomingPacket(parsed, {
           dataUrl: voiceDataUrl,
           duration: voiceDuration,
-          deviceId: parsed.deviceId
+          deviceId: parsed.deviceId,
+          message: finalMsg
         });
       }
 
@@ -2420,9 +2455,6 @@
         AppState.audioModem.transmitPacket(packetBytes).catch(() => {});
       }
 
-      if (msgInput) msgInput.value = '';
-      const charCounter = document.getElementById('senderCharCounter');
-      if (charCounter) charCounter.textContent = '0 / 17 Bytes';
       discardVoiceRecording();
 
       AppState.stats.txCount++;
@@ -2439,19 +2471,20 @@
   /* -------------------------------------------------------------------------- */
 
   function handleOneTapPanicSos() {
+    const typedMsg = document.getElementById('senderInputMessage')?.value?.trim();
     executePanicSosDispatch({
       source: 'panic',
       distressType: AppState.activeDistressType || 1,
-      message: 'PANIC SOS: NEED RESCUE'
+      message: typedMsg || 'PANIC SOS: NEED RESCUE'
     });
   }
 
   function handleBroadcastSos(source) {
-    const msg = document.getElementById('senderInputMessage')?.value || 'NEED RESCUE ASAP';
+    const typedMsg = document.getElementById('senderInputMessage')?.value?.trim();
     executeRegularSosDispatch({
       source: 'regular',
       distressType: AppState.activeDistressType || 1,
-      message: msg
+      message: typedMsg || 'NEED RESCUE ASAP'
     });
   }
 
@@ -2775,7 +2808,7 @@
       senderMsgInput.addEventListener('input', () => {
         const len = senderMsgInput.value.length;
         const counter = document.getElementById('senderCharCounter');
-        if (counter) counter.textContent = `${len} / 17 Bytes`;
+        if (counter) counter.textContent = `${len} / 100 Chars`;
       });
     }
 
