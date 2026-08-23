@@ -1216,31 +1216,36 @@
   /* -------------------------------------------------------------------------- */
 
   async function dispatchRescueAck(targetMessageId) {
-    console.log(`[SilentBridge ACK] Dispatching rescue ACK for Message #${targetMessageId}`);
+    console.log(`[SilentBridge ACK] Instant dispatching rescue ACK for Message #${targetMessageId}`);
     const ackPacket = PacketEngine.createAckPacket(targetMessageId, 'RESCUE EN ROUTE');
 
     try {
+      // 1. Instant Acoustic Audio Transmission
       if (AppState.audioModem) {
         AppState.audioModem.transmitPacket(ackPacket).catch(() => {});
       }
 
+      // 2. Instant Local BroadcastChannel Sync (< 1ms)
       if (AppState.syncChannel) {
-        AppState.syncChannel.postMessage({
-          type: 'ACK_BROADCAST',
-          targetMessageId: targetMessageId,
-          timestamp: Date.now()
-        });
+        try {
+          AppState.syncChannel.postMessage({
+            type: 'ACK_BROADCAST',
+            targetMessageId: targetMessageId,
+            timestamp: Date.now()
+          });
+        } catch (e) {}
       }
 
-      // Dual-Layer LocalStorage Event Sync (Bulletproof across all windows/tabs)
+      // 3. Instant LocalStorage Event Sync (< 2ms)
       try {
         localStorage.setItem('silentbridge_last_ack_event', JSON.stringify({
           targetMessageId: targetMessageId,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          nonce: Math.random()
         }));
       } catch (e) {}
 
-      // Multi-Device Cloud Mesh ACK Broadcast
+      // 4. Instant Cloud Mesh WebSocket Broadcast (< 50ms)
       if (AppState.cloudWs && AppState.cloudWs.readyState === WebSocket.OPEN) {
         try {
           AppState.cloudWs.send(JSON.stringify({
@@ -1261,7 +1266,7 @@
   function handleIncomingAck(targetMessageId) {
     console.log(`[SilentBridge] ACK received for Beacon #${targetMessageId}`);
 
-    // 1. Show Top Banner
+    // 1. Show Top Banner on Sender
     const banner = document.getElementById('senderAckBanner');
     const timeEl = document.getElementById('ackTimestamp');
     const msgEl = document.getElementById('ackMessageText');
@@ -1280,15 +1285,15 @@
     const meshBadge = document.getElementById('meshSenderTrackingBadge');
 
     if (trackingCard) {
-      trackingCard.className = 'p-4 rounded-2xl bg-emerald-950/90 border-2 border-emerald-400 shadow-2xl shadow-emerald-950/80 font-mono text-xs flex items-center justify-between gap-3 transition-all duration-500 mb-6';
+      trackingCard.className = 'p-4 rounded-3xl bg-emerald-50 border-2 border-emerald-400 shadow-xl font-mono text-xs flex items-center justify-between gap-3 transition-all duration-500 mb-6';
     }
 
     if (statusText) {
-      statusText.innerHTML = `<span class="text-emerald-300 font-extrabold text-sm flex items-center gap-1.5"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i> ✅ RESCUE ACK RECEIVED: Base Station Confirmed Beacon #${targetMessageId}! Rescue Team En Route.</span>`;
+      statusText.innerHTML = `<span class="text-emerald-950 font-extrabold text-sm flex items-center gap-1.5"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i> ✅ RESCUE ACK RECEIVED: Base Station Confirmed Beacon #${targetMessageId}! Rescue Team En Route.</span>`;
     }
     if (statusBadge) {
       statusBadge.textContent = 'ACK RECEIVED ✓';
-      statusBadge.className = 'text-[10px] px-3 py-1 rounded-lg bg-emerald-500 text-slate-950 font-mono font-extrabold shadow-lg shadow-emerald-950/50';
+      statusBadge.className = 'text-[10px] px-3 py-1 rounded-xl bg-emerald-500 text-white font-mono font-extrabold shadow-sm';
     }
     if (trackingDot) {
       trackingDot.innerHTML = `
@@ -1298,13 +1303,14 @@
     }
     if (meshBadge) {
       meshBadge.textContent = 'ACK CONFIRMED ✓';
-      meshBadge.className = 'text-[10px] px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-bold';
+      meshBadge.className = 'text-[10px] px-2 py-0.5 rounded bg-emerald-500 text-white font-bold';
     }
 
     AppState.stats.ackCount++;
     const ackCountEl = document.getElementById('statAckCount');
     if (ackCountEl) ackCountEl.textContent = AppState.stats.ackCount;
 
+    // Play pleasant confirmation chime on survivor side (NEVER a loud siren)
     playAckSuccessChime();
 
     if (window.lucide) window.lucide.createIcons();
@@ -1320,27 +1326,36 @@
 
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(523.25, ctx.currentTime);
-      osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1);
-      osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2);
-      osc.frequency.setValueAtTime(1046.50, ctx.currentTime + 0.3);
+      osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08);
+      osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.16);
+      osc.frequency.setValueAtTime(1046.50, ctx.currentTime + 0.24);
 
       gain.gain.setValueAtTime(0.001, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.05);
-      gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.55);
+      gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.04);
+      gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.45);
 
       osc.connect(gain);
       gain.connect(ctx.destination);
 
       osc.start();
-      osc.stop(ctx.currentTime + 0.6);
+      osc.stop(ctx.currentTime + 0.5);
     } catch (e) {}
   }
 
   /* -------------------------------------------------------------------------- */
-  /*                AUTHENTIC RESCUE EMERGENCY SIREN (RECEIVER)                 */
+  /*                AUTHENTIC RESCUE EMERGENCY SIREN (RECEIVER ONLY)            */
   /* -------------------------------------------------------------------------- */
 
   function playEmergencySiren() {
+    // Strictly prevent siren from ever playing on the Survivor / Sender side
+    const isReceiverPage = window.location.pathname.toLowerCase().endsWith('receiver.html');
+    const isReceiverRole = (AppState.currentRole === 'receiver');
+    const isUnlockedAuthority = document.getElementById('authorityDashboard') && !document.getElementById('authorityDashboard').classList.contains('hidden');
+
+    if (!isReceiverPage && !isReceiverRole && !isUnlockedAuthority) {
+      return; // Absolute silence on survivor SOS sender
+    }
+
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
@@ -1431,9 +1446,7 @@
     }
 
     // AUTOMATIC FALSE ALARM IDENTIFICATION & TRIAGE ENGINE:
-    // If coordinates are (0,0) or missing and no voice SOS is attached, classify as potential false alarm
     const hasValidGps = (packet.latitude !== 0 || packet.longitude !== 0) && Math.abs(packet.latitude) <= 90 && Math.abs(packet.longitude) <= 180;
-    const isExplicitPanic = packet.message && (packet.message.includes('PANIC') || packet.message.includes('RESCUE') || packet.message.includes('TRAPPED') || packet.message.includes('MEDIC'));
     
     if (!hasValidGps && !packet.hasVoice) {
       packet.isFalseAlarm = true;
@@ -1464,15 +1477,24 @@
       }
     }
 
-    // 🚨 Sound Siren for verified emergency beacons (Mute siren for auto-flagged false alarms)
-    if (!packet.isFalseAlarm) {
-      playEmergencySiren();
-    } else {
-      playMutedFalseAlarmBeep();
+    // 🚨 Sound Siren ONLY on Rescuer Command Dashboard (Never on Survivor side)
+    const isReceiver = (AppState.currentRole === 'receiver') || 
+                       window.location.pathname.toLowerCase().endsWith('receiver.html') ||
+                       (document.getElementById('authorityDashboard') && !document.getElementById('authorityDashboard').classList.contains('hidden'));
+
+    if (isReceiver) {
+      if (!packet.isFalseAlarm) {
+        playEmergencySiren();
+      } else {
+        playMutedFalseAlarmBeep();
+      }
     }
   }
 
   function playMutedFalseAlarmBeep() {
+    const isReceiver = (AppState.currentRole === 'receiver') || window.location.pathname.toLowerCase().endsWith('receiver.html');
+    if (!isReceiver) return;
+
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
@@ -1806,19 +1828,19 @@
     const trackingDot = document.getElementById('senderTrackingDot');
 
     if (trackingCard) {
-      trackingCard.className = 'bg-tactical-900/90 border border-amber-500/60 rounded-2xl p-4 shadow-xl font-mono text-xs flex items-center justify-between gap-3 mb-6';
+      trackingCard.className = 'bg-purple-50 border-2 border-purple-300 rounded-3xl p-4 shadow-md font-mono text-xs flex items-center justify-between gap-3 mb-6';
     }
     if (statusText) {
-      statusText.innerHTML = `<span class="text-amber-300 font-extrabold">🚨 EMERGENCY BEACON #${messageId} TRANSMITTED // Awaiting Base Station ACK...</span>`;
+      statusText.innerHTML = `<span class="text-purple-950 font-extrabold text-xs">🚨 EMERGENCY BEACON #${messageId} BROADCASTED // Awaiting Base Station ACK...</span>`;
     }
     if (statusBadge) {
       statusBadge.textContent = 'SOS DISPATCHED';
-      statusBadge.className = 'text-[10px] px-2.5 py-1 rounded-lg bg-red-600 text-white font-mono font-bold animate-pulse shadow-md';
+      statusBadge.className = 'text-[10px] px-2.5 py-1 rounded-xl bg-purple-200 text-purple-950 font-mono font-extrabold animate-pulse shadow-sm';
     }
     if (trackingDot) {
       trackingDot.innerHTML = `
-        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-        <span class="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-3 w-3 bg-purple-600"></span>
       `;
     }
 
@@ -1879,19 +1901,19 @@
     const trackingDot = document.getElementById('senderTrackingDot');
 
     if (trackingCard) {
-      trackingCard.className = 'bg-tactical-900/90 border border-amber-500/50 rounded-2xl p-4 shadow-xl font-mono text-xs flex items-center justify-between gap-3 mb-6';
+      trackingCard.className = 'bg-purple-50 border-2 border-purple-300 rounded-3xl p-4 shadow-md font-mono text-xs flex items-center justify-between gap-3 mb-6';
     }
     if (statusText) {
-      statusText.innerHTML = `Beacon #${messageId} Broadcasted (<span class="text-amber-400 font-bold">Awaiting Base Station ACK...</span>)`;
+      statusText.innerHTML = `Beacon #${messageId} Broadcasted (<span class="text-purple-900 font-extrabold">Awaiting Base Station ACK...</span>)`;
     }
     if (statusBadge) {
       statusBadge.textContent = 'AWAITING ACK...';
-      statusBadge.className = 'text-[10px] px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono font-bold animate-pulse';
+      statusBadge.className = 'text-[10px] px-2.5 py-1 rounded-xl bg-purple-200 text-purple-950 border border-purple-300 font-mono font-extrabold animate-pulse';
     }
     if (trackingDot) {
       trackingDot.innerHTML = `
-        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-        <span class="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-3 w-3 bg-purple-600"></span>
       `;
     }
 

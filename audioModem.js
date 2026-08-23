@@ -1,18 +1,22 @@
 /**
- * SilentBridge - Dual-Engine Web Audio Acoustic Modem
+ * SilentBridge - Ultra-Fast Sub-Second Web Audio Acoustic Modem
  * Handles Binary Frequency Shift Keying (BFSK) Transmission (Tx) and Real-Time FFT Demodulation (Rx).
+ * 
+ * Optimized Timings (< 0.9s total packet burst):
+ *  - Preamble: 35ms
+ *  - Bit Duration: 2.8ms
+ *  - Guard Duration: 0.4ms
+ *  - 256 bits total = ~820ms transmission time!
  * 
  * Frequencies:
  *  - Ultrasonic Mode (Default):
- *      Preamble: 18.0 kHz (60ms)
- *      Bit 0:    18.5 kHz (10ms)
- *      Bit 1:    19.5 kHz (10ms)
- *      Guard:    2ms silence
+ *      Preamble: 18.0 kHz
+ *      Bit 0:    18.5 kHz
+ *      Bit 1:    19.5 kHz
  *  - Audible Demo Mode:
- *      Preamble: 1.5 kHz (60ms)
- *      Bit 0:    1.8 kHz (10ms)
- *      Bit 1:    2.2 kHz (10ms)
- *      Guard:    2ms silence
+ *      Preamble: 1.5 kHz
+ *      Bit 0:    1.8 kHz
+ *      Bit 1:    2.2 kHz
  */
 
 (function (root, factory) {
@@ -65,11 +69,11 @@
       this.mode = options.mode || 'ultrasonic';
       this.profile = FREQ_PROFILES[this.mode] || FREQ_PROFILES.ultrasonic;
 
-      // High-speed modulation timing for instant transmission (~600ms total)
-      this.preambleDuration = options.preambleDuration || 0.050; // 50ms
-      this.bitDuration = options.bitDuration || 0.005;           // 5ms per bit
-      this.guardDuration = options.guardDuration || 0.001;       // 1ms guard
-      this.rampDuration = 0.001;                                // 1ms smooth envelope
+      // Sub-Second Modulation Timings (Total transmission ~850ms)
+      this.preambleDuration = options.preambleDuration || 0.035; // 35ms preamble
+      this.bitDuration = options.bitDuration || 0.0028;           // 2.8ms per bit
+      this.guardDuration = options.guardDuration || 0.0004;       // 0.4ms guard
+      this.rampDuration = 0.0006;                                // 0.6ms envelope ramp
 
       // Audio Contexts & Nodes
       this.audioCtx = null;
@@ -86,17 +90,13 @@
       this.isListening = false;
       this.rxState = RX_STATE.OFF;
 
-      // Receiver internal tracking
+      // Receiver Demodulator Tracking
       this.rxAnimationId = null;
-      this.preambleHitCount = 0;
-      this.rxBitBuffer = [];
+      this.preambleConsecutiveHits = 0;
+      this.rxBits = [];
       this.rxExpectedBits = 256;
-      this.rxBitStartTime = 0;
-      this.rxLastSampleTime = 0;
-      this.rxBitIndex = 0;
-      this.rxBitSamples = [];
+      this.rxSamplingInterval = null;
       this.rxTimeoutTimer = null;
-      this.adaptiveThreshold = 12;
       this.ambientNoiseFloor = -100;
 
       // Event Callbacks
@@ -162,7 +162,7 @@
 
         this.analyserNode = this.audioCtx.createAnalyser();
         this.analyserNode.fftSize = this.fftSize;
-        this.analyserNode.smoothingTimeConstant = 0.15;
+        this.analyserNode.smoothingTimeConstant = 0.12;
         this.analyserNode.minDecibels = -100;
         this.analyserNode.maxDecibels = -10;
 
@@ -192,6 +192,10 @@
       if (this.rxAnimationId) {
         cancelAnimationFrame(this.rxAnimationId);
         this.rxAnimationId = null;
+      }
+      if (this.rxSamplingInterval) {
+        clearInterval(this.rxSamplingInterval);
+        this.rxSamplingInterval = null;
       }
       if (this.rxTimeoutTimer) {
         clearTimeout(this.rxTimeoutTimer);
@@ -284,6 +288,18 @@
       const peakSignal = Math.max(preambleEnergy, bit0Energy, bit1Energy);
       const snr = Math.max(0, peakSignal - noiseFloor);
 
+      // Preamble Detection State Machine
+      if (this.rxState === RX_STATE.LISTENING) {
+        if (preambleEnergy > (noiseFloor + 8) && preambleEnergy > bit0Energy && preambleEnergy > bit1Energy) {
+          this.preambleConsecutiveHits++;
+          if (this.preambleConsecutiveHits >= 2) {
+            this._startAcousticBitCapture();
+          }
+        } else {
+          this.preambleConsecutiveHits = Math.max(0, this.preambleConsecutiveHits - 1);
+        }
+      }
+
       if (this.onAudioLevels) {
         let peakFreq = this.profile.preambleFreq;
         if (bit0Energy > preambleEnergy && bit0Energy > bit1Energy) peakFreq = this.profile.bit0Freq;
@@ -301,8 +317,91 @@
       this.rxAnimationId = requestAnimationFrame(this._rxLoop);
     }
 
+    _startAcousticBitCapture() {
+      this._setRxState(RX_STATE.RECEIVING_BITS);
+      this.preambleConsecutiveHits = 0;
+      this.rxBits = [];
+
+      const symbolPeriodMs = (this.bitDuration + this.guardDuration) * 1000;
+      let bitCounter = 0;
+
+      if (this.rxSamplingInterval) clearInterval(this.rxSamplingInterval);
+
+      // Wait out the remainder of preamble (30ms) before sampling bits
+      setTimeout(() => {
+        if (this.rxState !== RX_STATE.RECEIVING_BITS) return;
+
+        this.rxSamplingInterval = setInterval(() => {
+          if (!this.isListening || this.rxState !== RX_STATE.RECEIVING_BITS) {
+            clearInterval(this.rxSamplingInterval);
+            return;
+          }
+
+          if (this.analyserNode) {
+            this.analyserNode.getFloatFrequencyData(this.floatFftBuffer);
+          }
+
+          const e0 = this.getEnergyAtFreq(this.profile.bit0Freq, 1);
+          const e1 = this.getEnergyAtFreq(this.profile.bit1Freq, 1);
+          const detectedBit = (e1 >= e0) ? 1 : 0;
+          this.rxBits.push(detectedBit);
+          bitCounter++;
+
+          if (this.onRxProgress) {
+            this.onRxProgress(bitCounter / this.rxExpectedBits);
+          }
+
+          if (bitCounter >= this.rxExpectedBits) {
+            clearInterval(this.rxSamplingInterval);
+            this.rxSamplingInterval = null;
+            this._finalizeAcousticPacket();
+          }
+        }, symbolPeriodMs);
+
+        // Safety timeout to prevent stuck demodulator
+        this.rxTimeoutTimer = setTimeout(() => {
+          if (this.rxState === RX_STATE.RECEIVING_BITS) {
+            if (this.rxSamplingInterval) clearInterval(this.rxSamplingInterval);
+            this._setRxState(RX_STATE.LISTENING);
+          }
+        }, (this.rxExpectedBits * symbolPeriodMs) + 300);
+
+      }, 30);
+    }
+
+    _finalizeAcousticPacket() {
+      this._setRxState(RX_STATE.VALIDATING);
+
+      if (this.rxBits.length >= 256) {
+        const bytes = new Uint8Array(32);
+        for (let i = 0; i < 32; i++) {
+          let byteVal = 0;
+          for (let b = 0; b < 8; b++) {
+            byteVal = (byteVal << 1) | (this.rxBits[i * 8 + b] || 0);
+          }
+          bytes[i] = byteVal;
+        }
+
+        // Verify CRC16
+        const isValidCrc = CRC16.verify(bytes);
+        if (isValidCrc) {
+          const parsed = PacketEngine.parsePacket(bytes);
+          if (parsed.valid) {
+            console.log('[AudioModem] 📡 Verified Acoustic Packet Decoded via BFSK Sound Waves!', parsed);
+            if (this.onPacketReceived) {
+              this.onPacketReceived(parsed);
+            }
+          }
+        } else {
+          if (this.onCrcError) this.onCrcError(bytes);
+        }
+      }
+
+      this._setRxState(RX_STATE.LISTENING);
+    }
+
     /**
-     * Transmits a 32-byte packet over acoustic BFSK with fast burst
+     * Transmits a 32-byte packet over acoustic BFSK with fast sub-second burst (< 0.85s)
      */
     async transmitPacket(packetBytes) {
       if (this.isTransmitting) return;
@@ -325,7 +424,7 @@
       }
 
       const totalBits = bits.length;
-      const startTime = this.audioCtx.currentTime + 0.02;
+      const startTime = this.audioCtx.currentTime + 0.015;
 
       const masterGain = this.audioCtx.createGain();
       masterGain.gain.setValueAtTime(0, this.audioCtx.currentTime);
@@ -333,12 +432,12 @@
 
       let scheduledTime = startTime;
 
-      // 1. Preamble Tone
+      // 1. Fast Preamble Tone (35ms)
       const preambleFreq = this.profile.preambleFreq;
       this._scheduleTone(scheduledTime, preambleFreq, this.preambleDuration, masterGain);
       scheduledTime += this.preambleDuration + this.guardDuration;
 
-      // 2. Transmit 256 Bits rapidly (~400-600ms total)
+      // 2. Transmit 256 Bits rapidly (~800ms total)
       const symbolDuration = this.bitDuration;
       const guardDuration = this.guardDuration;
 
@@ -358,7 +457,7 @@
           masterGain.disconnect();
           if (this.onTxEnd) this.onTxEnd(packetBytes);
           resolve();
-        }, totalDurationMs + 50);
+        }, totalDurationMs + 30);
       });
     }
 
@@ -381,7 +480,7 @@
       toneGain.connect(destinationNode);
 
       osc.start(startTime);
-      osc.stop(startTime + duration + 0.003);
+      osc.stop(startTime + duration + 0.002);
     }
   }
 
