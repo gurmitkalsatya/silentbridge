@@ -1352,11 +1352,14 @@
 
   function playEmergencySiren() {
     // Strictly prevent siren from ever playing on the Survivor / Sender side
-    const isReceiverPage = window.location.pathname.toLowerCase().endsWith('receiver.html');
-    const isReceiverRole = (AppState.currentRole === 'receiver');
-    const isUnlockedAuthority = document.getElementById('authorityDashboard') && !document.getElementById('authorityDashboard').classList.contains('hidden');
+    const isReceiverPage = window.location.pathname.toLowerCase().includes('receiver') || 
+                           window.location.href.toLowerCase().includes('receiver') ||
+                           (document.getElementById('authorityDashboard') !== null) ||
+                           (document.getElementById('receiverEmergencyFeedList') !== null);
 
-    if (!isReceiverPage && !isReceiverRole && !isUnlockedAuthority) {
+    const isSenderOnly = (AppState.currentRole === 'sender') && (!isReceiverPage || window.location.pathname.toLowerCase().includes('sender'));
+
+    if (isSenderOnly) {
       return; // Absolute silence on survivor SOS sender
     }
 
@@ -1364,16 +1367,19 @@
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
       const now = ctx.currentTime;
-      const totalCycles = 3;
-      const cycleDuration = 0.75; // 0.75s per wail cycle
+      const totalCycles = 4;
+      const cycleDuration = 0.65; // 0.65s per energetic emergency wail cycle
       const totalDuration = totalCycles * cycleDuration;
 
       // Master Gain
       const masterGain = ctx.createGain();
       masterGain.gain.setValueAtTime(0.001, now);
-      masterGain.gain.linearRampToValueAtTime(0.45, now + 0.04);
-      masterGain.gain.setValueAtTime(0.45, now + totalDuration - 0.08);
+      masterGain.gain.linearRampToValueAtTime(0.5, now + 0.03);
+      masterGain.gain.setValueAtTime(0.5, now + totalDuration - 0.06);
       masterGain.gain.linearRampToValueAtTime(0.001, now + totalDuration);
       masterGain.connect(ctx.destination);
 
@@ -1390,14 +1396,14 @@
         const midPoint = cycleStart + cycleDuration * 0.5;
         const cycleEnd = cycleStart + cycleDuration;
 
-        // Undulating emergency pitch sweep: 620 Hz -> 1480 Hz -> 620 Hz
+        // Undulating emergency pitch sweep: 620 Hz -> 1550 Hz -> 620 Hz
         osc1.frequency.setValueAtTime(620, cycleStart);
-        osc1.frequency.exponentialRampToValueAtTime(1480, midPoint);
+        osc1.frequency.exponentialRampToValueAtTime(1550, midPoint);
         osc1.frequency.exponentialRampToValueAtTime(620, cycleEnd);
 
-        // Harmonic layer: 310 Hz -> 740 Hz -> 310 Hz
+        // Harmonic layer: 310 Hz -> 775 Hz -> 310 Hz
         osc2.frequency.setValueAtTime(310, cycleStart);
-        osc2.frequency.exponentialRampToValueAtTime(740, midPoint);
+        osc2.frequency.exponentialRampToValueAtTime(775, midPoint);
         osc2.frequency.exponentialRampToValueAtTime(310, cycleEnd);
       }
 
@@ -1449,18 +1455,9 @@
       packet.hasVoice = false;
     }
 
-    // AUTOMATIC FALSE ALARM IDENTIFICATION & TRIAGE ENGINE:
-    const hasValidGps = (packet.latitude !== 0 || packet.longitude !== 0) && Math.abs(packet.latitude) <= 90 && Math.abs(packet.longitude) <= 180;
-    
-    if (!hasValidGps && !packet.hasVoice) {
-      packet.isFalseAlarm = true;
-      packet.autoFlagged = true;
-      packet.autoFlaggedReason = 'Missing Satellite GPS & No Voice SOS Memo Attached';
-      console.warn(`[SilentBridge Triage] ⚠️ Auto-Flagged Potential False Alarm on Beacon #${packet.messageId}: ${packet.autoFlaggedReason}`);
-    } else {
-      packet.isFalseAlarm = false;
-      packet.isVerified = true;
-    }
+    // All incoming survivor distress calls are treated as real emergency alerts
+    packet.isFalseAlarm = false;
+    packet.isVerified = true;
 
     AppState.stats.rxCount++;
     const rxCountEl = document.getElementById('statRxCount');
@@ -1481,22 +1478,22 @@
       }
     }
 
-    // 🚨 Sound Siren ONLY on Rescuer Command Dashboard (Never on Survivor side)
+    // 🚨 Sound Siren IMMEDIATELY on Rescuer Command Dashboard (Never on Survivor side)
     const isReceiver = (AppState.currentRole === 'receiver') || 
-                       window.location.pathname.toLowerCase().endsWith('receiver.html') ||
-                       (document.getElementById('authorityDashboard') && !document.getElementById('authorityDashboard').classList.contains('hidden'));
+                       window.location.pathname.toLowerCase().includes('receiver') ||
+                       window.location.href.toLowerCase().includes('receiver') ||
+                       (document.getElementById('authorityDashboard') !== null) ||
+                       (document.getElementById('receiverEmergencyFeedList') !== null);
 
-    if (isReceiver) {
-      if (!packet.isFalseAlarm) {
-        playEmergencySiren();
-      } else {
-        playMutedFalseAlarmBeep();
-      }
+    const isSenderOnly = (AppState.currentRole === 'sender') && !isReceiver;
+
+    if (isReceiver && !isSenderOnly) {
+      playEmergencySiren();
     }
   }
 
   function playMutedFalseAlarmBeep() {
-    const isReceiver = (AppState.currentRole === 'receiver') || window.location.pathname.toLowerCase().endsWith('receiver.html');
+    const isReceiver = (AppState.currentRole === 'receiver') || window.location.pathname.toLowerCase().includes('receiver');
     if (!isReceiver) return;
 
     try {
@@ -2476,6 +2473,22 @@
 
     updateBlockedCountBadge();
   }
+
+  // Auto-Unlock Web Audio Context on first interaction for guaranteed immediate siren playback
+  function autoUnlockAudioContext() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        const dummyCtx = new AudioCtx();
+        if (dummyCtx.state === 'suspended') {
+          dummyCtx.resume().catch(() => {});
+        }
+      }
+    } catch (e) {}
+  }
+  window.addEventListener('click', autoUnlockAudioContext, { once: true });
+  window.addEventListener('touchstart', autoUnlockAudioContext, { once: true });
+  window.addEventListener('keydown', autoUnlockAudioContext, { once: true });
 
   document.addEventListener('DOMContentLoaded', initApp);
 })();
