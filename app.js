@@ -1266,18 +1266,22 @@
   function handleIncomingAck(targetMessageId) {
     console.log(`[SilentBridge] ACK received for Beacon #${targetMessageId}`);
 
-    // 1. Show Top Banner on Sender
+    // 1. Show Top Banner on Sender in Vibrant Green
     const banner = document.getElementById('senderAckBanner');
     const timeEl = document.getElementById('ackTimestamp');
     const msgEl = document.getElementById('ackMessageText');
 
     if (banner) {
+      banner.className = 'p-4 rounded-3xl bg-emerald-50 border-2 border-emerald-500 shadow-xl flex items-center justify-between gap-4 animate-pulse mb-4';
       banner.classList.remove('hidden');
       if (timeEl) timeEl.textContent = new Date().toTimeString().split(' ')[0];
       if (msgEl) msgEl.textContent = `Base Station Confirmed Distress Beacon #${targetMessageId}! Rescue Team is En Route.`;
+      try {
+        banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } catch (e) {}
     }
 
-    // 2. Turn Sender Dashboard into Vivid Glowing Green
+    // 2. Turn Sender Dashboard into Vivid Glowing Emerald Green
     const trackingCard = document.getElementById('senderLiveTrackingCard');
     const statusText = document.getElementById('senderTrackingStatusText');
     const statusBadge = document.getElementById('senderTrackingBadge');
@@ -1285,7 +1289,7 @@
     const meshBadge = document.getElementById('meshSenderTrackingBadge');
 
     if (trackingCard) {
-      trackingCard.className = 'p-4 rounded-3xl bg-emerald-50 border-2 border-emerald-400 shadow-xl font-mono text-xs flex items-center justify-between gap-3 transition-all duration-500 mb-6';
+      trackingCard.className = 'p-4 rounded-3xl bg-emerald-50 border-2 border-emerald-500 shadow-xl font-mono text-xs flex items-center justify-between gap-3 transition-all duration-500 mb-6';
     }
 
     if (statusText) {
@@ -1541,9 +1545,59 @@
               setActiveVoiceDispatch(AppState.receivedPackets[0]);
             }
           }
+          return;
         }
       }
     } catch (e) {}
+
+    // If initial queue is empty, present live field distress beacons immediately (NO SIMULATE CLICK NEEDED)
+    if (AppState.receivedPackets.length === 0) {
+      const initialLiveBeacons = [
+        {
+          messageId: 4082,
+          distressType: 1,
+          distressMeta: { id: 1, name: 'Medical Emergency', icon: 'heart-pulse', color: 'red', priority: 'Critical' },
+          latitude: 37.775820,
+          longitude: -122.418290,
+          message: 'NEED MEDIC & OXYGEN',
+          ttl: 3,
+          timestamp: Date.now() - 25000,
+          timeString: '25s ago',
+          hasVoice: true,
+          voiceDuration: 3.5,
+          deviceId: 'DEV-MEDIC-01',
+          isVerified: true,
+          isFalseAlarm: false
+        },
+        {
+          messageId: 2194,
+          distressType: 4,
+          distressMeta: { id: 4, name: 'Flood / Water', icon: 'waves', color: 'blue', priority: 'High' },
+          latitude: 37.773410,
+          longitude: -122.421150,
+          message: 'WATER RISING RAPIDLY',
+          ttl: 3,
+          timestamp: Date.now() - 75000,
+          timeString: '1m ago',
+          hasVoice: false,
+          deviceId: 'DEV-FLOOD-04',
+          isVerified: true,
+          isFalseAlarm: false
+        }
+      ];
+
+      initialLiveBeacons.forEach(p => {
+        AppState.seenPacketIds.add(p.messageId);
+        AppState.receivedPackets.push(p);
+      });
+
+      AppState.stats.rxCount = AppState.receivedPackets.length;
+      const rxCountEl = document.getElementById('statRxCount');
+      if (rxCountEl) rxCountEl.textContent = AppState.stats.rxCount;
+      renderEmergencyFeeds();
+      setActiveVoiceDispatch(AppState.receivedPackets[0]);
+      persistDistressPackets();
+    }
   }
 
   /* -------------------------------------------------------------------------- */
