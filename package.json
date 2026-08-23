@@ -1,0 +1,23 @@
+{
+  "name": "silentbridge",
+  "version": "3.4.0",
+  "description": "SilentBridge - Acoustic Mesh & Real-Time Emergency SOS Relay System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "emergency-sos",
+    "acoustic-mesh",
+    "triage",
+    "rescue-dispatch"
+  ],
+  "author": "SilentBridge Team",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "ws": "^8.18.0"
+  }
+}

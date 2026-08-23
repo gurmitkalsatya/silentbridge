@@ -440,6 +440,63 @@
         </div>
       </div>
 
+      <!-- 🚨 PULSING RED LIVE INCIDENT ALERT BANNER -->
+      <div id="receiverLiveIncidentAlertBanner" class="hidden p-5 rounded-3xl bg-gradient-to-r from-red-50 via-rose-50 to-red-50 border-2 border-red-500 shadow-2xl flex flex-col gap-4 animate-pulse">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-red-200 pb-3">
+          <div class="flex items-center gap-3">
+            <div class="p-2.5 rounded-2xl bg-red-600 text-white shadow-md">
+              <i data-lucide="siren" class="w-6 h-6 text-white"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="px-2.5 py-0.5 rounded-lg bg-red-600 text-white font-mono text-[10px] font-extrabold uppercase tracking-wide">
+                  🚨 ACTIVE SOS BROADCAST DETECTED
+                </span>
+                <span id="incidentBannerId" class="text-xs font-mono font-bold text-red-950">#INCIDENT</span>
+                <span id="incidentBannerTime" class="text-xs font-mono text-slate-600">JUST NOW</span>
+              </div>
+              <h3 id="incidentBannerTitle" class="text-lg font-extrabold text-slate-950 tracking-wide uppercase mt-0.5">
+                "PANIC SOS: NEED IMMEDIATE RESCUE"
+              </h3>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button type="button" id="btnSilenceSiren" class="px-3.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-400 font-mono font-extrabold text-xs flex items-center gap-1.5 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]">
+              <i data-lucide="bell-off" class="w-4 h-4 text-amber-700"></i>
+              <span>🔕 Silence Siren</span>
+            </button>
+            <button type="button" id="btnBannerDispatchAck" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-mono font-extrabold text-xs flex items-center gap-1.5 shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]">
+              <i data-lucide="check-check" class="w-4 h-4 text-white"></i>
+              <span>Dispatch & ACK</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 font-mono text-xs">
+          <div class="bg-white/90 p-3.5 rounded-2xl border border-red-200 flex items-center justify-between gap-2">
+            <div>
+              <span class="text-[10px] text-slate-500 font-bold block">SATELLITE GPS COORDINATES</span>
+              <strong id="incidentBannerGps" class="text-sm font-extrabold text-slate-950">37.774900, -122.419400 (±3.5m)</strong>
+              <span id="incidentBannerAddress" class="text-[11px] text-slate-600 block mt-0.5">GPS Location Fix</span>
+            </div>
+            <a id="incidentBannerMapsLink" href="https://www.google.com/maps?q=37.774900,-122.419400" target="_blank" rel="noopener noreferrer" class="px-3 py-2 rounded-xl bg-purple-100 hover:bg-purple-200 text-slate-950 border border-purple-300 font-bold flex items-center gap-1.5 shadow-sm transition-all hover:scale-[1.02] shrink-0">
+              <i data-lucide="map" class="w-4 h-4 text-purple-700"></i>
+              <span>Open in Maps ↗</span>
+            </a>
+          </div>
+
+          <div class="bg-white/90 p-3.5 rounded-2xl border border-red-200 flex flex-col justify-center">
+            <span class="text-[10px] text-slate-500 font-bold block mb-1">AMBIENT AUDIO SNIPPET (RECORDED ON SENDER)</span>
+            <div id="incidentBannerAudioContainer">
+              <audio id="incidentBannerAudioPlayer" controls class="w-full h-8" preload="auto">
+                Your browser does not support audio element.
+              </audio>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Top Audio Voice Dispatch Player -->
       <div id="receiverVoiceDispatchConsole" class="bg-white border-2 border-purple-200 rounded-3xl p-4 sm:p-5 shadow-md flex flex-col gap-3">
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-purple-100 pb-3">

@@ -54,8 +54,13 @@
       isPlaying: false
     },
 
-    // Cross-Tab Multi-Device Synchronization
+    // Emergency Siren Controller
+    activeSirenNodes: [],
+
+    // Cross-Tab & Backend WebSocket Multi-Device Synchronization
     syncChannel: null,
+    localWs: null,
+    cloudWs: null,
 
     // Statistics
     stats: {
@@ -1095,7 +1100,7 @@
             </div>
 
             <!-- Exact Location & Google Maps Link -->
-            <div class="bg-purple-50/80 p-3.5 rounded-xl border border-purple-200 mb-3.5 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+            <div class="bg-purple-50/80 p-3.5 rounded-xl border border-purple-200 mb-3 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
               <div class="flex items-center gap-2">
                 <i data-lucide="map-pin" class="w-4 h-4 text-purple-700"></i>
                 <span class="text-slate-600 font-bold">EXACT GPS:</span>
@@ -1113,6 +1118,22 @@
                 </a>
               </div>
             </div>
+
+            <!-- In-Line HTML5 Ambient Audio Snippet Player -->
+            ${pkt.hasVoice && (pkt.voiceDataUrl || pkt.audio_base64) ? `
+              <div class="mb-3.5 p-3 rounded-2xl bg-purple-50/90 border border-purple-200 flex flex-col gap-1.5">
+                <div class="flex items-center justify-between text-[10px] font-mono font-extrabold text-purple-950">
+                  <span class="flex items-center gap-1.5">
+                    <i data-lucide="volume-2" class="w-3.5 h-3.5 text-purple-700"></i>
+                    AMBIENT AUDIO MEMO SNIPPET (${(pkt.voiceDuration || 3.5).toFixed(1)}s)
+                  </span>
+                  <span class="text-purple-800">IN-LINE AUDIO PLAYER</span>
+                </div>
+                <audio controls class="w-full h-8 rounded-lg" src="${pkt.voiceDataUrl || pkt.audio_base64}" preload="none">
+                  Your browser does not support the audio element.
+                </audio>
+              </div>
+            ` : ''}
 
             <!-- Action Controls: Listen Voice, Verify, Flag False Alarm, Block Device, Send ACK, Clear -->
             <div class="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-purple-100">
@@ -1347,7 +1368,7 @@
   }
 
   /* -------------------------------------------------------------------------- */
-  /*                AUTHENTIC RESCUE EMERGENCY SIREN (RECEIVER ONLY)            */
+  /*                AUTHENTIC RESCUE EMERGENCY SIREN & SILENCE CONTROLLER       */
   /* -------------------------------------------------------------------------- */
 
   function playEmergencySiren() {
@@ -1364,6 +1385,8 @@
     }
 
     try {
+      silenceEmergencySiren(); // Stop previous siren if still playing
+
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
@@ -1371,7 +1394,7 @@
         ctx.resume().catch(() => {});
       }
       const now = ctx.currentTime;
-      const totalCycles = 4;
+      const totalCycles = 6;
       const cycleDuration = 0.65; // 0.65s per energetic emergency wail cycle
       const totalDuration = totalCycles * cycleDuration;
 
@@ -1387,7 +1410,7 @@
       const osc1 = ctx.createOscillator();
       osc1.type = 'sawtooth';
 
-      // Secondary Oscillator (Triangle wave for resonant acoustic body)
+      // Secondary Oscillator (Triangle wave for resonant body)
       const osc2 = ctx.createOscillator();
       osc2.type = 'triangle';
 
@@ -1415,9 +1438,136 @@
 
       osc1.stop(now + totalDuration + 0.05);
       osc2.stop(now + totalDuration + 0.05);
+
+      AppState.activeSirenNodes = [masterGain, osc1, osc2, ctx];
+
+      // Auto-clear reference after siren cycle finishes
+      setTimeout(() => {
+        if (AppState.activeSirenNodes.includes(masterGain)) {
+          AppState.activeSirenNodes = [];
+        }
+      }, (totalDuration + 0.1) * 1000);
+
     } catch (e) {
       console.warn('Siren audio notice:', e);
     }
+  }
+
+  function silenceEmergencySiren() {
+    console.log('[SilentBridge] 🔕 Silencing emergency siren on user/officer command');
+    if (AppState.activeSirenNodes && AppState.activeSirenNodes.length > 0) {
+      AppState.activeSirenNodes.forEach(node => {
+        try {
+          if (node.stop) node.stop();
+          if (node.disconnect) node.disconnect();
+          if (node.close) node.close();
+        } catch (e) {}
+      });
+      AppState.activeSirenNodes = [];
+    }
+
+    const btnSilence = document.getElementById('btnSilenceSiren');
+    if (btnSilence) {
+      btnSilence.innerHTML = `<i data-lucide="check" class="w-4 h-4 text-emerald-700"></i><span>Siren Silenced ✓</span>`;
+      btnSilence.className = 'px-3.5 py-2 rounded-xl bg-emerald-100 text-emerald-950 border border-emerald-300 font-mono font-bold text-xs flex items-center gap-1.5 shadow-sm';
+      if (window.lucide) window.lucide.createIcons();
+    }
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /*               BROADCAST SOS HANDLER (RECEIVER INCIDENT BANNER)             */
+  /* -------------------------------------------------------------------------- */
+
+  function handleIncomingBroadcastSos(payload) {
+    if (!payload) return;
+    const lat = payload.location?.lat || payload.latitude || 37.774900;
+    const lng = payload.location?.lng || payload.longitude || -122.419400;
+    const msg = payload.message || 'PANIC SOS: NEED IMMEDIATE RESCUE';
+    const address = payload.location?.address || `GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    const mapUrl = payload.map_url || `https://www.google.com/maps?q=${lat},${lng}`;
+    const audioBase64 = payload.audio_base64 || payload.voiceDataUrl || null;
+    const audioDuration = payload.audio_duration || payload.voiceDuration || 3.5;
+    const sessionId = payload.session_id || `INC-${Date.now().toString(36).toUpperCase()}`;
+    const msgId = parseInt(sessionId.replace(/\D/g, '').substring(0, 4), 10) || Math.floor(Math.random() * 9000 + 1000);
+    const distressType = payload.distress_type || payload.distressType || 1;
+
+    // 1. Display Pulsing Red Banner on Receiver Console
+    const alertBanner = document.getElementById('receiverLiveIncidentAlertBanner');
+    const bannerId = document.getElementById('incidentBannerId');
+    const bannerTime = document.getElementById('incidentBannerTime');
+    const bannerTitle = document.getElementById('incidentBannerTitle');
+    const bannerGps = document.getElementById('incidentBannerGps');
+    const bannerAddress = document.getElementById('incidentBannerAddress');
+    const bannerMapsLink = document.getElementById('incidentBannerMapsLink');
+    const bannerAudio = document.getElementById('incidentBannerAudioPlayer');
+
+    if (alertBanner) {
+      alertBanner.classList.remove('hidden');
+      if (bannerId) bannerId.textContent = `#${sessionId}`;
+      if (bannerTime) bannerTime.textContent = 'JUST NOW';
+      if (bannerTitle) bannerTitle.textContent = `"${msg}"`;
+      if (bannerGps) bannerGps.textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)} (±3.5m)`;
+      if (bannerAddress) bannerAddress.textContent = address;
+      if (bannerMapsLink) bannerMapsLink.href = mapUrl;
+
+      // In-Line HTML5 Audio Player Preloaded with Base64 Audio Clip
+      if (bannerAudio) {
+        if (audioBase64) {
+          bannerAudio.src = audioBase64;
+          bannerAudio.style.display = 'block';
+        } else {
+          bannerAudio.style.display = 'none';
+        }
+      }
+
+      const btnSilence = document.getElementById('btnSilenceSiren');
+      if (btnSilence) {
+        btnSilence.innerHTML = `<i data-lucide="bell-off" class="w-4 h-4 text-amber-700"></i><span>🔕 Silence Siren</span>`;
+        btnSilence.className = 'px-3.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-400 font-mono font-extrabold text-xs flex items-center gap-1.5 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]';
+      }
+
+      const btnDispatchAck = document.getElementById('btnBannerDispatchAck');
+      if (btnDispatchAck) {
+        btnDispatchAck.onclick = async () => {
+          await dispatchRescueAck(msgId);
+          btnDispatchAck.innerHTML = `<i data-lucide="check" class="w-4 h-4 text-white"></i><span>ACK Sent ✓</span>`;
+          btnDispatchAck.className = 'px-4 py-2 rounded-xl bg-emerald-700 text-white font-mono font-extrabold text-xs flex items-center gap-1.5 shadow-md';
+        };
+      }
+
+      try {
+        alertBanner.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (e) {}
+    }
+
+    const packetObj = {
+      messageId: msgId,
+      sessionId: sessionId,
+      distressType: distressType,
+      distressMeta: PacketEngine.DISTRESS_TYPES[distressType] || { id: 1, name: 'Medical Emergency', icon: 'heart-pulse', color: 'red', priority: 'Critical' },
+      latitude: lat,
+      longitude: lng,
+      message: msg,
+      address: address,
+      mapUrl: mapUrl,
+      hasVoice: !!audioBase64,
+      voiceDataUrl: audioBase64,
+      audio_base64: audioBase64,
+      voiceDuration: audioDuration,
+      deviceId: payload.device_id || payload.deviceId || `DEV-${(msgId * 17) % 9000 + 1000}`,
+      timestamp: Date.now(),
+      timeString: 'Just now',
+      isVerified: true,
+      isFalseAlarm: false
+    };
+
+    handleIncomingPacket(packetObj, {
+      dataUrl: audioBase64,
+      duration: audioDuration,
+      deviceId: packetObj.deviceId
+    });
+
+    if (window.lucide) window.lucide.createIcons();
   }
 
   /* -------------------------------------------------------------------------- */
@@ -1434,11 +1584,9 @@
       return;
     }
 
-    // Attach or extract persistent Device ID
     const devId = packet.deviceId || (voiceAttachment && voiceAttachment.deviceId) || `DEV-${((packet.messageId * 17) % 9000 + 1000).toString(16).toUpperCase()}`;
     packet.deviceId = devId;
 
-    // Check if this sender device has been blacklisted / blocked
     const blocked = getBlockedDevices();
     if (blocked.some(b => b.deviceId === devId)) {
       console.warn(`[SilentBridge Anti-Misuse] 🚫 Blocked rogue beacon #${packet.messageId} from blacklisted device: ${devId}`);
@@ -1450,12 +1598,12 @@
     if (voiceAttachment) {
       packet.hasVoice = true;
       packet.voiceDataUrl = voiceAttachment.dataUrl || voiceAttachment.voiceDataUrl;
-      packet.voiceDuration = voiceAttachment.duration || voiceAttachment.voiceDuration || 3.0;
+      packet.audio_base64 = packet.voiceDataUrl;
+      packet.voiceDuration = voiceAttachment.duration || voiceAttachment.voiceDuration || 3.5;
     } else {
-      packet.hasVoice = false;
+      packet.hasVoice = !!packet.audio_base64;
     }
 
-    // All incoming survivor distress calls are treated as real emergency alerts
     packet.isFalseAlarm = false;
     packet.isVerified = true;
 
@@ -1627,12 +1775,44 @@
       } catch (e) {}
     });
 
-    // 3. Global Real-Time Cloud Mesh WebSocket Relay (Works Across Devices/Networks)
+    // 3. Local Backend WebSocket Relay (e.g. ws://localhost:3000/ws)
+    initLocalWebSocketRelay();
+
+    // 4. Global Real-Time Cloud Mesh WebSocket Relay (Works Across Devices/Networks)
     initCloudMeshRelay();
 
-    // 4. Initial Load & Periodic Background Sync Poll
+    // 5. Initial Load & Periodic Background Sync Poll
     loadPersistedDistressPackets();
     setInterval(loadPersistedDistressPackets, 1500);
+  }
+
+  function initLocalWebSocketRelay() {
+    try {
+      const loc = window.location;
+      const wsProto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProto}//${loc.host}/ws`;
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        console.log('[SilentBridge] ⚡ Local Backend WebSocket Relay Connected ✓');
+        AppState.localWs = ws;
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          processSyncEvent(data);
+        } catch (e) {}
+      };
+
+      ws.onclose = () => {
+        AppState.localWs = null;
+      };
+
+      ws.onerror = () => {
+        AppState.localWs = null;
+      };
+    } catch (e) {}
   }
 
   function initCloudMeshRelay() {
@@ -1667,7 +1847,9 @@
 
   function processSyncEvent(data) {
     if (!data) return;
-    if (data.type === 'DISTRESS_BROADCAST') {
+    if (data.type === 'BROADCAST_SOS') {
+      handleIncomingBroadcastSos(data.incident || data);
+    } else if (data.type === 'DISTRESS_BROADCAST') {
       const rawBytes = PacketEngine.fromHex(data.packetHex);
       const parsed = PacketEngine.parsePacket(rawBytes);
       if (parsed.valid) {
@@ -1679,7 +1861,7 @@
         });
       }
     } else if (data.type === 'ACK_BROADCAST') {
-      handleIncomingAck(data.targetMessageId);
+      handleIncomingAck(data.target_message_id || data.targetMessageId);
     }
   }
 
@@ -1706,7 +1888,12 @@
       localStorage.setItem('silentbridge_last_distress_event', JSON.stringify(payload));
     } catch (e) {}
 
-    // 3. Post to Global Cloud Mesh WebSocket (Multi-Device Delivery)
+    // 3. Post to Local & Cloud WebSocket Mesh
+    if (AppState.localWs && AppState.localWs.readyState === WebSocket.OPEN) {
+      try {
+        AppState.localWs.send(JSON.stringify(payload));
+      } catch (e) {}
+    }
     if (AppState.cloudWs && AppState.cloudWs.readyState === WebSocket.OPEN) {
       try {
         AppState.cloudWs.send(JSON.stringify(payload));
@@ -1862,6 +2049,242 @@
       }
     }
   };
+
+  /* -------------------------------------------------------------------------- */
+  /*       BROADCAST SOS WORKFLOW (HIGH-ACCURACY GPS & 3-5s AMBIENT AUDIO)      */
+  /* -------------------------------------------------------------------------- */
+
+  async function broadcastSosWithAudioAndGps(options = {}) {
+    const sessionId = options.session_id || `SES-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+    const distressType = options.distressType || AppState.activeDistressType || 1;
+    const msgText = options.message || (document.getElementById('senderInputMessage')?.value) || 'PANIC SOS: NEED RESCUE';
+
+    // 1. Live Visual Indicator on Sender UI
+    const hud = document.getElementById('broadcastStatusHud');
+    const hudTitle = document.getElementById('broadcastStatusTitle');
+    const hudSub = document.getElementById('broadcastStatusSub');
+    const hudCountdown = document.getElementById('broadcastCountdownBadge');
+    const progressBar = document.getElementById('heroBroadcastProgressBar');
+
+    if (hud) hud.classList.remove('hidden');
+    if (hudTitle) hudTitle.textContent = '1/2: ACQUIRING REAL-TIME GPS SATELLITE FIX...';
+    if (hudSub) hudSub.textContent = 'High-accuracy geolocation via browser API';
+    if (progressBar) progressBar.style.width = '25%';
+
+    // 2. Automatically Fetch Real-Time High-Accuracy GPS via navigator.geolocation.getCurrentPosition
+    let locationData = {
+      lat: AppState.currentLat,
+      lng: AppState.currentLon,
+      address: `GPS: ${AppState.currentLat.toFixed(6)}, ${AppState.currentLon.toFixed(6)}`,
+      accuracy: AppState.gpsAccuracyMeters || 5.0
+    };
+
+    try {
+      if ('geolocation' in navigator) {
+        const pos = await new Promise((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (p) => resolve(p),
+            (err) => {
+              console.warn('[SilentBridge GPS] High-accuracy geolocation note:', err.message);
+              resolve(null);
+            },
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+          );
+        });
+
+        if (pos && pos.coords) {
+          AppState.currentLat = pos.coords.latitude;
+          AppState.currentLon = pos.coords.longitude;
+          AppState.gpsAccuracyMeters = pos.coords.accuracy || 3.5;
+
+          const latInput = document.getElementById('senderInputLat');
+          const lonInput = document.getElementById('senderInputLon');
+          if (latInput) latInput.value = pos.coords.latitude.toFixed(6);
+          if (lonInput) lonInput.value = pos.coords.longitude.toFixed(6);
+
+          locationData = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            address: `GPS: ${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`,
+            accuracy: pos.coords.accuracy || 3.5
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('[SilentBridge GPS] Using fallback GPS coordinates:', e);
+    }
+
+    if (progressBar) progressBar.style.width = '50%';
+    if (hudTitle) hudTitle.textContent = '2/2: RECORDING 3.5s AMBIENT AUDIO SNIPPET...';
+    if (hudSub) hudSub.textContent = 'MediaRecorder ambient background sound capture';
+
+    // 3. Simultaneously Record 3 to 5 Second Ambient Audio Snippet
+    let recordedAudioBase64 = null;
+    let audioDurationSeconds = 0;
+
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null);
+        if (stream) {
+          const mimeType = (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm;codecs=opus'))
+            ? 'audio/webm;codecs=opus' 
+            : (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/wav');
+
+          const recorder = new MediaRecorder(stream, { mimeType });
+          const chunks = [];
+
+          recorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) chunks.push(e.data);
+          };
+
+          const recordPromise = new Promise((resolve) => {
+            recorder.onstop = async () => {
+              const blob = new Blob(chunks, { type: mimeType });
+              stream.getTracks().forEach(track => track.stop());
+
+              // Convert Blob chunk to Base64 String
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                resolve({ base64: reader.result, duration: 3.5 });
+              };
+              reader.readAsDataURL(blob);
+            };
+          });
+
+          recorder.start(200);
+
+          // Animate countdown (3.5s)
+          let remaining = 3.5;
+          const intervalId = setInterval(() => {
+            remaining -= 0.5;
+            if (hudCountdown) hudCountdown.textContent = `${Math.max(0, remaining).toFixed(1)}s`;
+            if (progressBar) progressBar.style.width = `${50 + (3.5 - remaining) * 14}%`;
+          }, 500);
+
+          await new Promise(r => setTimeout(r, 3500));
+          clearInterval(intervalId);
+
+          if (recorder.state !== 'inactive') {
+            recorder.stop();
+          }
+
+          const result = await recordPromise;
+          recordedAudioBase64 = result.base64;
+          audioDurationSeconds = result.duration;
+        }
+      }
+    } catch (micErr) {
+      console.warn('[SilentBridge Mic] Microphone capture note:', micErr);
+    }
+
+    if (progressBar) progressBar.style.width = '100%';
+    if (hud) hud.classList.add('hidden');
+    if (progressBar) progressBar.style.width = '0%';
+
+    // 4. Construct Exact Required Payload Schema:
+    const payload = {
+      session_id: sessionId,
+      type: "BROADCAST_SOS",
+      distress_type: distressType,
+      message: msgText,
+      location: {
+        lat: locationData.lat,
+        lng: locationData.lng,
+        address: locationData.address,
+        accuracy: locationData.accuracy
+      },
+      map_url: `https://www.google.com/maps?q=${locationData.lat},${locationData.lng}`,
+      audio_base64: recordedAudioBase64,
+      audio_duration: audioDurationSeconds || 3.5,
+      timestamp: new Date().toISOString()
+    };
+
+    console.log('[SilentBridge SOS] 🚨 Sending complete BROADCAST_SOS payload:', payload);
+
+    // 5. Send WebSocket / REST / Mesh Relays
+    // a. REST API POST /api/sos
+    try {
+      fetch('/api/sos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(r => r.json()).then(data => {
+        console.log('[SilentBridge REST] Relay response:', data);
+      }).catch(() => {});
+    } catch (e) {}
+
+    // b. Local WebSocket Relay (/ws)
+    if (AppState.localWs && AppState.localWs.readyState === WebSocket.OPEN) {
+      try {
+        AppState.localWs.send(JSON.stringify(payload));
+      } catch (e) {}
+    }
+
+    // c. Cloud Mesh WebSocket Relay
+    if (AppState.cloudWs && AppState.cloudWs.readyState === WebSocket.OPEN) {
+      try {
+        AppState.cloudWs.send(JSON.stringify(payload));
+      } catch (e) {}
+    }
+
+    // d. Local BroadcastChannel
+    if (AppState.syncChannel) {
+      try {
+        AppState.syncChannel.postMessage(payload);
+      } catch (e) {}
+    }
+
+    // e. LocalStorage Event Bus
+    try {
+      localStorage.setItem('silentbridge_last_distress_event', JSON.stringify({
+        ...payload,
+        packetHex: PacketEngine.toHex(PacketEngine.createPacket({
+          messageId: parseInt(sessionId.replace(/\D/g, '').substring(0, 4), 10) || 1234,
+          distressType: distressType,
+          latitude: locationData.lat,
+          longitude: locationData.lng,
+          message: msgText,
+          ttl: 3
+        }), ''),
+        voiceDataUrl: recordedAudioBase64,
+        voiceDuration: audioDurationSeconds
+      }));
+    } catch (e) {}
+
+    // f. Acoustic BFSK Modulation
+    const packetBytes = PacketEngine.createPacket({
+      messageId: parseInt(sessionId.replace(/\D/g, '').substring(0, 4), 10) || 1234,
+      distressType: distressType,
+      latitude: locationData.lat,
+      longitude: locationData.lng,
+      message: msgText,
+      ttl: 3
+    });
+
+    if (AppState.audioModem) {
+      AppState.audioModem.transmitPacket(packetBytes).catch(() => {});
+    }
+
+    // 6. Update Sender Dashboard Live Tracking
+    const trackingCard = document.getElementById('senderLiveTrackingCard');
+    const statusText = document.getElementById('senderTrackingStatusText');
+    const statusBadge = document.getElementById('senderTrackingBadge');
+
+    if (trackingCard) {
+      trackingCard.className = 'bg-purple-50 border-2 border-purple-300 rounded-3xl p-4 shadow-md font-mono text-xs flex items-center justify-between gap-3 mb-6';
+    }
+    if (statusText) {
+      statusText.innerHTML = `<span class="text-purple-950 font-extrabold text-xs">🚨 SOS BROADCASTED (GPS: ${locationData.lat.toFixed(4)}, ${locationData.lng.toFixed(4)}) // Awaiting Base Station ACK...</span>`;
+    }
+    if (statusBadge) {
+      statusBadge.textContent = 'SOS DISPATCHED';
+      statusBadge.className = 'text-[10px] px-2.5 py-1 rounded-xl bg-purple-200 text-purple-950 font-mono font-extrabold animate-pulse shadow-sm';
+    }
+
+    AppState.stats.txCount++;
+    const txCountEl = document.getElementById('statTxCount');
+    if (txCountEl) txCountEl.textContent = AppState.stats.txCount;
+  }
 
   /* -------------------------------------------------------------------------- */
   /*                  ACTUAL PAYLOAD TRANSMISSION HANDLERS                      */
@@ -2356,6 +2779,14 @@
       });
     }
 
+    // 🚨 Prominent Hero Broadcast SOS Button (Real-Time GPS & 3-5s Ambient Audio)
+    const btnHeroBroadcast = document.getElementById('btnHeroBroadcastSos');
+    if (btnHeroBroadcast) {
+      btnHeroBroadcast.addEventListener('click', () => {
+        broadcastSosWithAudioAndGps();
+      });
+    }
+
     // ⚡ 1-Tap Panic SOS Button
     const btnOneTap = document.getElementById('btnOneTapPanicSos');
     if (btnOneTap) btnOneTap.addEventListener('click', handleOneTapPanicSos);
@@ -2363,8 +2794,22 @@
     const btnSenderBroadcast = document.getElementById('btnSenderBroadcastSos');
     const btnMeshBroadcast = document.getElementById('btnMeshBroadcastSos');
 
-    if (btnSenderBroadcast) btnSenderBroadcast.addEventListener('click', () => handleBroadcastSos('sender'));
-    if (btnMeshBroadcast) btnMeshBroadcast.addEventListener('click', () => handleBroadcastSos('mesh'));
+    if (btnSenderBroadcast) {
+      btnSenderBroadcast.addEventListener('click', () => {
+        broadcastSosWithAudioAndGps();
+      });
+    }
+    if (btnMeshBroadcast) {
+      btnMeshBroadcast.addEventListener('click', () => {
+        broadcastSosWithAudioAndGps();
+      });
+    }
+
+    // 🔕 Silence Siren Button
+    const btnSilence = document.getElementById('btnSilenceSiren');
+    if (btnSilence) {
+      btnSilence.addEventListener('click', silenceEmergencySiren);
+    }
 
     const btnSim = document.getElementById('btnSimulatePacket');
     if (btnSim) {
