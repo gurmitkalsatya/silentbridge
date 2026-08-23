@@ -1022,10 +1022,10 @@
     const buildFeedHtml = () => {
       if (AppState.receivedPackets.length === 0) {
         return `
-          <div class="p-8 text-center border border-dashed border-tactical-border rounded-2xl bg-tactical-950/50 text-slate-500 font-mono text-xs">
-            <i data-lucide="shield-check" class="w-10 h-10 mx-auto mb-2.5 text-slate-600"></i>
-            No active distress beacons received.<br>
-            Acoustic listener standing by across all channels.
+          <div class="p-8 text-center border-2 border-dashed border-purple-200 rounded-2xl bg-purple-50/50 text-slate-600 font-mono text-xs shadow-inner">
+            <i data-lucide="shield-check" class="w-10 h-10 mx-auto mb-2.5 text-purple-600"></i>
+            <span class="font-bold text-slate-800">No active distress beacons in queue.</span><br>
+            <span class="text-slate-500">Acoustic & Cloud mesh listeners standing by across all channels.</span>
           </div>
         `;
       }
@@ -1040,107 +1040,107 @@
         pkt.deviceId = devId;
 
         return `
-          <div class="p-4 sm:p-5 rounded-2xl border ${pkt.isFalseAlarm ? 'border-amber-500/80 bg-amber-950/20' : meta.bgClass} bg-tactical-900/95 shadow-xl transition-all hover:border-slate-500 relative" id="card_${pkt.messageId}">
+          <div class="p-4 sm:p-5 rounded-2xl border-2 ${pkt.isFalseAlarm ? 'border-amber-400 bg-amber-50/70' : 'border-purple-200 bg-white'} shadow-md transition-all hover:shadow-xl hover:border-purple-400 relative" id="card_${pkt.messageId}">
             
             <!-- Top Line: Disaster Badge, Trust Score, Device ID & Timestamp -->
-            <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div class="flex flex-wrap items-center gap-2">
-                <span class="px-3 py-1 rounded-lg text-xs font-mono font-extrabold uppercase ${meta.badgeClass} flex items-center gap-1.5 shadow-sm">
-                  <i data-lucide="${meta.icon}" class="w-4 h-4"></i>
+                <span class="px-3 py-1 rounded-xl text-xs font-mono font-extrabold uppercase bg-purple-100 text-purple-950 border border-purple-300 flex items-center gap-1.5 shadow-sm">
+                  <i data-lucide="${meta.icon}" class="w-4 h-4 text-purple-700"></i>
                   ${meta.name}
                 </span>
 
                 <!-- Trust Score Pill -->
-                <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-mono font-extrabold uppercase border ${trust.badgeClass} flex items-center gap-1">
-                  <i data-lucide="${trust.icon}" class="w-3 h-3"></i>
+                <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-mono font-extrabold uppercase bg-purple-50 text-purple-900 border border-purple-300 flex items-center gap-1">
+                  <i data-lucide="${trust.icon}" class="w-3 h-3 text-purple-600"></i>
                   ${trust.label}
                 </span>
 
-                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-tactical-800 text-slate-400 border border-tactical-border font-bold">
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded-lg bg-slate-100 text-slate-800 border border-slate-300 font-bold">
                   🆔 ${devId}
                 </span>
-                <span class="text-xs font-mono text-slate-400 font-bold">#${pkt.messageId}</span>
+                <span class="text-xs font-mono text-slate-600 font-bold">#${pkt.messageId}</span>
               </div>
 
-              <div class="text-xs font-mono text-slate-400 flex items-center gap-1.5">
+              <div class="text-xs font-mono text-slate-600 flex items-center gap-1.5">
                 <i data-lucide="clock" class="w-3.5 h-3.5 text-slate-500"></i>
-                <span>${pkt.timeString || timeStr}</span>
+                <span class="font-bold">${pkt.timeString || timeStr}</span>
               </div>
             </div>
 
             <!-- AUTOMATIC FALSE ALARM WARNING BANNER (If Auto-Identified) -->
             ${pkt.isFalseAlarm ? `
-              <div class="bg-amber-950/60 border border-amber-500/60 rounded-xl p-3 mb-3 text-xs font-mono text-amber-200 flex items-start gap-2.5 shadow-inner">
-                <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-400 shrink-0 mt-0.5"></i>
+              <div class="bg-amber-100 border border-amber-300 rounded-xl p-3 mb-3 text-xs font-mono text-amber-950 flex items-start gap-2.5 shadow-inner">
+                <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 shrink-0 mt-0.5"></i>
                 <div>
-                  <div class="font-extrabold text-amber-300 uppercase tracking-wide">⚠️ AUTOMATICALLY IDENTIFIED AS POTENTIAL FALSE ALARM</div>
-                  <div class="text-[11px] text-amber-200/90 mt-0.5">Reason: <strong>${pkt.autoFlaggedReason || 'No Voice Memo SOS Attached (Acoustic Verification Failed)'}</strong></div>
-                  <div class="text-[10px] text-slate-400 mt-1">Siren automatically muted. You can override and verify if genuine or block the sender below.</div>
+                  <div class="font-extrabold text-amber-900 uppercase tracking-wide">⚠️ AUTOMATICALLY IDENTIFIED AS POTENTIAL FALSE ALARM</div>
+                  <div class="text-[11px] text-amber-900 mt-0.5">Reason: <strong>${pkt.autoFlaggedReason || 'No Voice Memo SOS Attached'}</strong></div>
+                  <div class="text-[10px] text-slate-600 mt-1">Siren muted. You can verify or block this device below.</div>
                 </div>
               </div>
             ` : ''}
 
             <!-- Message & Voice Tag -->
-            <div class="text-base font-mono font-extrabold text-white mb-3 tracking-wide flex flex-wrap items-center justify-between gap-2">
+            <div class="text-base font-mono font-extrabold text-slate-950 mb-3 tracking-wide flex flex-wrap items-center justify-between gap-2">
               <span>"${pkt.message}"</span>
               ${pkt.hasVoice ? `
-                <span class="px-2.5 py-1 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40 text-xs flex items-center gap-1 font-bold">
-                  <i data-lucide="mic" class="w-3.5 h-3.5"></i> VOICE SOS ATTACHED
+                <span class="px-2.5 py-1 rounded-lg bg-purple-100 text-purple-950 border border-purple-300 text-xs flex items-center gap-1 font-bold shadow-sm">
+                  <i data-lucide="mic" class="w-3.5 h-3.5 text-purple-700"></i> VOICE SOS ATTACHED
                 </span>
               ` : `
-                <span class="px-2.5 py-1 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs flex items-center gap-1 font-bold">
-                  <i data-lucide="mic-off" class="w-3.5 h-3.5"></i> NO VOICE SOS (UNVERIFIED)
+                <span class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-300 text-xs flex items-center gap-1 font-bold">
+                  <i data-lucide="mic-off" class="w-3.5 h-3.5 text-slate-500"></i> NO VOICE SOS
                 </span>
               `}
             </div>
 
             <!-- Exact Location & Google Maps Link -->
-            <div class="bg-tactical-950 p-3 rounded-xl border border-tactical-border/70 mb-3.5 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+            <div class="bg-purple-50/80 p-3.5 rounded-xl border border-purple-200 mb-3.5 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
               <div class="flex items-center gap-2">
-                <i data-lucide="map-pin" class="w-4 h-4 text-cyan-400"></i>
-                <span class="text-slate-400">EXACT LOCATION:</span>
-                <strong class="text-white font-bold">${pkt.latitude.toFixed(6)}, ${pkt.longitude.toFixed(6)}</strong>
+                <i data-lucide="map-pin" class="w-4 h-4 text-purple-700"></i>
+                <span class="text-slate-600 font-bold">EXACT GPS:</span>
+                <strong class="text-slate-950 font-extrabold text-sm">${pkt.latitude.toFixed(6)}, ${pkt.longitude.toFixed(6)}</strong>
               </div>
 
               <div class="flex items-center gap-2">
-                <a href="${googleMapsUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 rounded-lg bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/40 font-bold flex items-center gap-1.5 transition-colors shadow-sm">
-                  <i data-lucide="map" class="w-3.5 h-3.5"></i>
-                  <span>Open in Google Maps ↗</span>
+                <a href="${googleMapsUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 rounded-xl bg-purple-100 hover:bg-purple-200 text-slate-950 border border-purple-300 font-bold flex items-center gap-1.5 transition-all shadow-sm hover:scale-[1.02] active:scale-[0.98]">
+                  <i data-lucide="map" class="w-3.5 h-3.5 text-purple-700"></i>
+                  <span>Open in Maps ↗</span>
                 </a>
-                <a href="${directionsUrl}" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1.5 rounded-lg bg-tactical-850 hover:bg-tactical-800 text-slate-300 border border-tactical-border font-bold flex items-center gap-1 transition-colors">
-                  <i data-lucide="navigation" class="w-3 h-3 text-amber-400"></i>
+                <a href="${directionsUrl}" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1.5 rounded-xl bg-white hover:bg-purple-100 text-slate-950 border border-purple-300 font-bold flex items-center gap-1 transition-all shadow-sm hover:scale-[1.02] active:scale-[0.98]">
+                  <i data-lucide="navigation" class="w-3 h-3 text-purple-700"></i>
                   <span>Directions</span>
                 </a>
               </div>
             </div>
 
             <!-- Action Controls: Listen Voice, Verify, Flag False Alarm, Block Device, Send ACK, Clear -->
-            <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-tactical-border/50">
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-purple-100">
               <div class="flex flex-wrap items-center gap-2">
-                <button type="button" class="btn-play-voice-card text-xs px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-mono font-bold transition-all flex items-center gap-1.5 shadow-md shadow-rose-950/40" data-msgid="${pkt.messageId}">
-                  <i data-lucide="play" class="w-3.5 h-3.5"></i> Play Voice
+                <button type="button" class="btn-play-voice-card text-xs px-3 py-1.5 rounded-xl bg-purple-100 hover:bg-purple-200 text-slate-950 font-mono font-bold border border-purple-300 transition-all flex items-center gap-1.5 shadow-sm hover:scale-[1.02] active:scale-[0.98]" data-msgid="${pkt.messageId}">
+                  <i data-lucide="play" class="w-3.5 h-3.5 text-purple-700"></i> Play Voice
                 </button>
-                <button type="button" class="btn-send-ack text-xs px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold transition-all flex items-center gap-1.5 shadow-md shadow-emerald-950/40" data-msgid="${pkt.messageId}">
-                  <i data-lucide="check-check" class="w-3.5 h-3.5"></i> Dispatch & ACK
+                <button type="button" class="btn-send-ack text-xs px-3 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-950 font-mono font-bold border border-emerald-300 transition-all flex items-center gap-1.5 shadow-sm hover:scale-[1.02] active:scale-[0.98]" data-msgid="${pkt.messageId}">
+                  <i data-lucide="check-check" class="w-3.5 h-3.5 text-emerald-700"></i> Dispatch & ACK
                 </button>
 
                 <!-- Anti-Misuse Triage Controls -->
                 ${pkt.isFalseAlarm ? `
-                  <button type="button" class="btn-verify-beacon text-xs px-2.5 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/50 font-mono font-bold flex items-center gap-1 shadow-sm" data-msgid="${pkt.messageId}" title="Override false alarm and mark as verified emergency">
-                    <i data-lucide="check" class="w-3.5 h-3.5"></i> Override & Verify
+                  <button type="button" class="btn-verify-beacon text-xs px-2.5 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-950 border border-emerald-300 font-mono font-bold flex items-center gap-1 shadow-sm transition-all hover:scale-[1.02]" data-msgid="${pkt.messageId}" title="Override false alarm and mark as verified emergency">
+                    <i data-lucide="check" class="w-3.5 h-3.5 text-emerald-700"></i> Override & Verify
                   </button>
                 ` : `
-                  <button type="button" class="btn-flag-false text-xs px-2.5 py-1.5 rounded-xl bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-500/40 font-mono font-bold flex items-center gap-1" data-msgid="${pkt.messageId}" title="Flag as Hoax / False Alarm">
-                    <i data-lucide="flag" class="w-3 h-3"></i> False Alarm
+                  <button type="button" class="btn-flag-false text-xs px-2.5 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300 font-mono font-bold flex items-center gap-1 transition-all hover:scale-[1.02]" data-msgid="${pkt.messageId}" title="Flag as Hoax / False Alarm">
+                    <i data-lucide="flag" class="w-3 h-3 text-amber-700"></i> False Alarm
                   </button>
                 `}
-                <button type="button" class="btn-block-dev text-xs px-2.5 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-500/40 font-mono font-bold flex items-center gap-1" data-devid="${devId}" title="Blacklist and Block this rogue device">
-                  <i data-lucide="ban" class="w-3 h-3"></i> Block Device
+                <button type="button" class="btn-block-dev text-xs px-2.5 py-1.5 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-950 border border-rose-300 font-mono font-bold flex items-center gap-1 transition-all hover:scale-[1.02]" data-devid="${devId}" title="Blacklist and Block this rogue device">
+                  <i data-lucide="ban" class="w-3 h-3 text-rose-700"></i> Block Device
                 </button>
               </div>
 
               <div>
-                <button type="button" class="btn-clear-single-beacon text-xs px-2.5 py-1.5 rounded-lg bg-tactical-800 hover:bg-tactical-700 text-slate-400 hover:text-slate-200 font-mono transition-colors" data-msgid="${pkt.messageId}">
+                <button type="button" class="btn-clear-single-beacon text-xs px-2.5 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-slate-700 hover:text-slate-950 font-mono border border-purple-200 transition-all hover:scale-[1.02]" data-msgid="${pkt.messageId}">
                   Clear
                 </button>
               </div>
@@ -1173,7 +1173,7 @@
         const msgId = parseInt(btn.dataset.msgid, 10);
         await dispatchRescueAck(msgId);
         btn.textContent = 'ACK Sent ✓ (Rescue En Route)';
-        btn.className = 'text-xs px-3 py-1.5 rounded-xl bg-emerald-900 text-emerald-300 border border-emerald-500/40 font-mono font-bold';
+        btn.className = 'text-xs px-3 py-1.5 rounded-xl bg-emerald-200 text-emerald-950 border border-emerald-400 font-mono font-extrabold shadow-sm';
       });
     });
 
